@@ -1,0 +1,19 @@
+Write this on Feb 4, 2016 - so don't remember what the issues were exactly. Using HDF5View to remind me.
+
+001 - no 2D information
+002 - no 2D or 1D information...
+003 - corrupt
+004 - empty hdf5 file...
+
+005 - threw error with fast5tofastx.py - newt_sciara_coprophila_library_013_embryomale_48hr_20150729_FloID_FAA48731_3001_1_ch115_file76_strand.fast5
+Traceback (most recent call last):
+  File "/users/jurban/software/fast5tools/fast5tofastx.py", line 154, in <module>
+    read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output)
+  File "/gpfs_home/jurban/software/fast5tools/f5ops.py", line 28, in get_molecule_read
+    return get_single_read(f5, f5.use_molecule(), minlen, maxlen, minq, maxq, output)
+  File "/gpfs_home/jurban/software/fast5tools/f5class.py", line 328, in use_molecule
+    if self.molecule == None:
+AttributeError: 'Fast5' object has no attribute 'molecule'
+005 solution -- add line to fast5tofastx.py -- if f5.is_not_corrupt() and f5.is_nonempty:
+
+
