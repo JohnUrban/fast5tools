@@ -16,7 +16,7 @@ It does not have all the functionality of poreminion or squiggler yet. I will me
 It can be pretty great though. 
 
 
-- fast5stats.py - generate a table with any fast5 info you want. I believe 
+- fast5stats.py - generate a table with any fast5 info you want. 
 - fast5TableSummary.py -- in progress -- The intention was to be able to give summary stats for any table with any fast5 info in any order (so long as you can tell it the order).
 - fast5plot.py us -- in progress. There are things in poreminion, squiggler, and poretools as well for plotting.
 - fast5ToEvents.py -- self-explanatory
