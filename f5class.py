@@ -563,6 +563,12 @@ class Fast5(object):
     def get_events_string(self, readtype):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_events(readtype)])
 
+    def get_events_header(self, readtype): ## 20160611-inprogress, make tests
+        return self.f5[self._get_location_path(readtype,"Events")].dtype.names
+
+    def get_events_header_string(self, readtype): ## 20160611-inprogress, make tests
+        return ("\t").join([str(e) for e in self.get_events_header(readtype)])
+
     def get_model(self, readtype):
         return self.f5[self._get_location_path(readtype,"Model")][()]
 
@@ -634,6 +640,7 @@ class Fast5(object):
         return self.get_basecaller_min_events(), self.get_basecaller_max_events()
 
     def test(self):
+        print "test", self.filename
         test = 1
         errors = 0
         try:
@@ -1052,6 +1059,11 @@ class Fast5(object):
                 print "Test %s: get model string (complement) failed." % test
 
         test += 1
+        try:
+            self.get_events("input")
+        except:
+            errors += 1
+            print "Test %s: get events (input) failed." % test
         if self.has_read("template"):
             try:
                 self.get_events("template")
@@ -1066,6 +1078,11 @@ class Fast5(object):
                 print "Test %s: get events (complement) failed." % test
 
         test += 1
+        try:
+            self.get_events_string("input")
+        except:
+            errors += 1
+            print "Test %s: get events string (input) failed." % test
         if self.has_read("template"):
             try:
                 self.get_events_string("template")
@@ -1078,6 +1095,47 @@ class Fast5(object):
             except:
                 errors += 1
                 print "Test %s: get events string (complement) failed." % test
+
+
+        test += 1
+        try:
+            self.get_events_header("input")
+        except:
+            errors += 1
+            print "Test %s: get events header (input) failed." % test
+        if self.has_read("template"):
+            try:
+                self.get_events_header("template")
+            except:
+                errors += 1
+                print "Test %s: get events header (template) failed." % test
+        if self.has_read("complement"):
+            try:
+                self.get_events_header("complement")
+            except:
+                errors += 1
+                print "Test %s: get events header (complement) failed." % test
+
+        test += 1
+        try:
+            self.get_events_header_string("input")
+        except:
+            errors += 1
+            print "Test %s: get events header string (input) failed." % test
+        if self.has_read("template"):
+            try:
+                self.get_events_header_string("template")
+            except:
+                errors += 1
+                print "Test %s: get events header string (template) failed." % test
+        if self.has_read("complement"):
+            try:
+                self.get_events_header_string("complement")
+            except:
+                errors += 1
+                print "Test %s: get events header string (complement) failed." % test
+
+
 
         test += 1
         try:

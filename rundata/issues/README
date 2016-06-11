@@ -16,4 +16,27 @@ Traceback (most recent call last):
 AttributeError: 'Fast5' object has no attribute 'molecule'
 005 solution -- add line to fast5tofastx.py -- if f5.is_not_corrupt() and f5.is_nonempty:
 
+--------------------------TODO-------------------------------
+issue_006.fast5 -- came from a file from very first Sciara run that was put outside the pass fail dirs after basecalling.
+It throws this error withh fast5stats.py:
+../../fast5stats.py issue_006.fast5 
+Traceback (most recent call last):
+  File "../../fast5stats.py", line 122, in <module>
+    errfile.write( get_error_fast5_stats(f5, args.delimiter) + "\n" )
+  File "../../fast5stats.py", line 108, in get_error_fast5_stats
+    return (delim).join([ str(f5fxn[f5cmd](f5)) for f5cmd in [19,11,20] ])
+  File "/Users/johnurban/searchPaths/github/fast5tools/f5ops.py", line 73, in <lambda>
+    f5fxn[11] = lambda f5: f5.get_num_events("input")
+  File "/Users/johnurban/searchPaths/github/fast5tools/f5class.py", line 398, in get_num_events
+    return self._get_attr(path = self._get_split_hairpin_path(), attr = "num_events")
+  File "/Users/johnurban/searchPaths/github/fast5tools/f5class.py", line 348, in _get_attr
+    return self.f5[path].attrs[attr]
+  File "_objects.pyx", line 54, in h5py._objects.with_phil.wrapper (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/_objects.c:2507)
+  File "_objects.pyx", line 55, in h5py._objects.with_phil.wrapper (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/_objects.c:2460)
+  File "/usr/local/Cellar/python/2.7.6/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/h5py/_hl/group.py", line 160, in __getitem__
+    oid = h5o.open(self.id, self._e(name), lapl=self._lapl)
+  File "_objects.pyx", line 54, in h5py._objects.with_phil.wrapper (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/_objects.c:2507)
+  File "_objects.pyx", line 55, in h5py._objects.with_phil.wrapper (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/_objects.c:2460)
+  File "h5o.pyx", line 190, in h5py.h5o.open (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/h5o.c:3555)
+KeyError: 'Unable to open object (Component not found)'
 
