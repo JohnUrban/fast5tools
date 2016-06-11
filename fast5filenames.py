@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+## JOHN URBAN (2015,2016)
 
 import h5py, os, sys
 import cStringIO as StringIO
@@ -17,8 +18,7 @@ For example, use to create file of file names (.fofn).
 Right now, if tars are included, it reports the filename as "tarball.tar{.gz}/filename-in-tar".
 
 
-John Urban (2015)
-
+John Urban (2015, 2016)
     """, formatter_class = argparse.RawTextHelpFormatter)
 
 

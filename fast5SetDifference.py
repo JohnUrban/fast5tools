@@ -5,7 +5,7 @@ import f5class
 import argparse
 
 
-
+##JOHN URBAN (2015,2016)
 #################################################
 ## Argument Parser
 #################################################
@@ -17,7 +17,7 @@ Output is 2 columns format with first column given directory it is unique to and
 Assumes that if a file appears in both directories, it has the same name.
 
 
-
+John Urban (2015, 2016)
     """, formatter_class = argparse.RawTextHelpFormatter)
 
 

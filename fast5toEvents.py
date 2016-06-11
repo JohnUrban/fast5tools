@@ -44,7 +44,7 @@ Currently, fast5tools does not do that in order to be more flexible with all the
 Instead (TODO), it should just optionally print a header -- and optionally convert variance to std (though that can be done with awk or something).
 
 
-John Urban (2015)
+John Urban (2015, 2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 

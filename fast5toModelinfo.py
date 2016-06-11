@@ -14,9 +14,9 @@ from glob import glob
 #################################################
 parser = argparse.ArgumentParser(description = """
 
-Given path(s) to fast5 file(s) and/or directories of fast5s, return fasta, fastq, qual, or intqual for all fast5s found.
+Given path(s) to fast5 file(s) and/or directories of fast5s, return info on base-calling model, its parameters, etc.
 
-John Urban (2015)
+John Urban (2015, 2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 

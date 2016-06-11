@@ -8,7 +8,7 @@ from f5ops import *
 import argparse
 from glob import glob
 
-
+## JOHN URBAN (2015,2016)
 #################################################
 ## Argument Parser
 #################################################
@@ -38,6 +38,7 @@ John Urban (2015)
 18 = fast5 filename (path as given)
 19 = fast5 filename (absolute path)
 
+John Urban (2015, 2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 

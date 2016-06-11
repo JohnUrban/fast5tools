@@ -16,10 +16,10 @@ parser = argparse.ArgumentParser(description = """
 
 Given path(s) to fast5 file(s) and/or directories of fast5s, return fasta, fastq, qual, or intqual for all fast5s found.
 
-John Urban (2015)
-
 For files that are corrupt or empty, for now it silently skips them.
 As an alternative, fast5stats will tell you all files skipped (in stderr or to specified file).
+
+John Urban (2015, 2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 

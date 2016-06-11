@@ -1,3 +1,5 @@
+##JOHN URBAN (2015, 2016)
+
 import numpy as np
 ######################
 #  Length stats

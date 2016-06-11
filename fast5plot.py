@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+## JOHN URBAN (2015,2016)
 
 import h5py, os, sys
 import cStringIO as StringIO
@@ -21,7 +22,8 @@ parser = argparse.ArgumentParser(description = """
 
 Given path(s) to fast5 file(s) and/or directories of fast5s, return desired plot given x and y.
 
-John Urban (2015)
+
+John Urban (2015, 2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 
