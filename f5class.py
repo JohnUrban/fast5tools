@@ -54,7 +54,9 @@ CHANNEL_NUMBER = "/UniqueGlobalKey/channel_id/channel_number" #01
 
 FILE_N = "/Analyses/Basecall_2D_000/Configuration/general/file_number" #01 
 READ_ID = "/Analyses/Basecall_2D_000/Configuration/general/read_id" #01
+
 TAG = "/Analyses/Basecall_2D_000/Configuration/general/tag" #01
+
 
 
 MODEL_TYPE = "/Analyses/Basecall_2D_000/Configuration/general/model_type" #01
@@ -228,7 +230,8 @@ class Fast5(object):
         elif readtype == "complement":
             return self.LOC_COMP + dataset
         elif readtype == "input":
-            return INPUT_EVENTS_PATH + "Read_" + self.get_read_id() +"/"+ dataset
+##            return INPUT_EVENTS_PATH + "Read_" + self.get_read_id() +"/"+ dataset
+            return INPUT_EVENTS_PATH + self.get_read_number() +"/"+ dataset
 
     def _get_general_path(self):
         try:
@@ -351,14 +354,17 @@ class Fast5(object):
 
     def _get_attr_path(self, readtype):
         '''readtpye in 2d, template, complement'''
-        if self.ATTR_2D == None:
-            self._find_attr_path()
-        if readtype == "2d":
-            return self.ATTR_2D
-        elif readtype == "template":
-            return self.ATTR_TEMP
-        elif readtype == "complement":
-            return self.ATTR_COMP
+        if self._basecalling_attempted:
+            if self.ATTR_2D == None:
+                self._find_attr_path()
+            if readtype == "2d":
+                return self.ATTR_2D
+            elif readtype == "template":
+                return self.ATTR_TEMP
+            elif readtype == "complement":
+                return self.ATTR_COMP
+        else: #not basecalled
+            return 
 
     def _find_attr_path(self):
         self.ATTR_2D = ATTR_2D
@@ -396,7 +402,9 @@ class Fast5(object):
         '''Assumes exists'''
         '''eventstpye in input, template, complement'''
         ''' if readtype is 2d, it just gives num of all events'''
-        if readtype == "input" or readtype == "2d":
+        if readtype == "input":
+            return self.f5["/Analyses/EventDetection_000/Reads/" + self.get_read_number() + "/Events"].shape[0]
+        elif readtype == "2d":
             return self._get_attr(path = self._get_split_hairpin_path(), attr = "num_events")
         else:
             return self._get_attr(path = self._get_attr_path(readtype), attr = "num_events")
@@ -477,7 +485,13 @@ class Fast5(object):
         return self.f5[self.GENERAL_PATH].attrs["file_number"]
 
     def get_read_id(self):
-        return self.f5[self.GENERAL_PATH].attrs["read_id"]
+        try:
+            return self.f5[self.GENERAL_PATH].attrs["read_id"]
+        except:
+            return self.f5["/Analyses/EventDetection_000/Reads/"+ self.get_read_number()].attrs["read_id"]
+
+    def get_read_number(self): ## June 22, 2016 -- not tested for all yet -- developing for non-basecalled files
+        return self.f5["/Analyses/EventDetection_000/Reads/"].keys()[0]
 
     def get_tag(self):
         return self.f5[self.GENERAL_PATH].attrs["tag"]
@@ -554,7 +568,10 @@ class Fast5(object):
         if which == "experiment":
             return self.f5["/UniqueGlobalKey/tracking_id"].attrs["exp_start_time"]
         elif which == "input":
-            return self.f5["/Analyses/EventDetection_000/Reads/Read_" + self.get_read_id()].attrs["start_time"]
+            try:
+                return self.f5["/Analyses/EventDetection_000/Reads/Read_" + self.get_read_id()].attrs["start_time"]
+            except:
+                return self.f5["/Analyses/EventDetection_000/Reads/" + self.get_read_number()].attrs["start_time"]
         elif self.has_read(which) and (which == "template" or which == "complement"):
             return self.f5[self._get_location_path(which,"Events")].attrs["start_time"]
 
@@ -786,27 +803,30 @@ class Fast5(object):
 
 
         test += 1
-        try:
-            self.get_model_type()
-        except:
-            errors += 1
-            print "Test %s: get model type failed." % (test)
+        if self._basecalling_attempted:
+            try:
+                self.get_model_type()
+            except:
+                errors += 1
+                print "Test %s: get model type failed." % (test)
 
 
         test += 1
-        try:
-            self.get_basename()
-        except:
-            errors += 1
-            print "Test %s: get basename failed." % (test)
+        if self._basecalling_attempted:
+            try:
+                self.get_basename()
+            except:
+                errors += 1
+                print "Test %s: get basename failed." % (test)
 
 
         test += 1
-        try:
-            self.get_file_number()
-        except:
-            errors += 1
-            print "Test %s: get filenumber failed." % (test)
+        if self._basecalling_attempted:
+            try:
+                self.get_file_number()
+            except:
+                errors += 1
+                print "Test %s: get filenumber failed." % (test)
 
 
         test += 1
@@ -818,11 +838,12 @@ class Fast5(object):
 
 
         test += 1
-        try:
-            self.get_tag()
-        except:
-            errors += 1
-            print "Test %s: get tag failed." % (test)
+        if self._basecalling_attempted:
+            try:
+                self.get_tag()
+            except:
+                errors += 1
+                print "Test %s: get tag failed." % (test)
 
 
         test += 1
@@ -1001,6 +1022,7 @@ class Fast5(object):
         except:
             errors += 1
             print "Test %s: get start time (exp) failed." % (test)
+
         try:
             self.get_start_time("input")
         except:
@@ -1195,21 +1217,22 @@ class Fast5(object):
             print "Test %s: get tc ratio limits failed." % test
 
         test += 1
-        try:
-            self.get_basecaller_min_events()
-        except:
-            errors += 1
-            print "Test %s: get basecaller min events failed." % test
-        try:
-            self.get_basecaller_max_events()
-        except:
-            errors += 1
-            print "Test %s: get basecaller max events failed." % test
-        try:
-            self.get_basecaller_events_limits()
-        except:
-            errors += 1
-            print "Test %s: get basecaller events limits failed." % test
+        if self._basecalling_attempted:
+            try:
+                self.get_basecaller_min_events()
+            except:
+                errors += 1
+                print "Test %s: get basecaller min events failed." % test
+            try:
+                self.get_basecaller_max_events()
+            except:
+                errors += 1
+                print "Test %s: get basecaller max events failed." % test
+            try:
+                self.get_basecaller_events_limits()
+            except:
+                errors += 1
+                print "Test %s: get basecaller events limits failed." % test
 
         print "There were %d errors total." % (errors)
 

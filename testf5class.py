@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
