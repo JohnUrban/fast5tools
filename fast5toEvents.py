@@ -133,11 +133,11 @@ if __name__ == "__main__":
                     if args.headertable:
                         print ("\t").join([f5.filename, f5.get_events_header(args.readtype)])
                     else:
-                        out = open(args.outdir + f5.get_base_info_name() + "." + args.readtype + ".eventsheader.txt", 'w')
+                        out = open(args.outdir + f5.filebasename + "." + args.readtype + ".eventsheader.txt", 'w')
                         out.write(f5.get_events_header_string(args.readtype))
                         out.close()
                 else:
-                    out = open(args.outdir + f5.get_base_info_name() + "." + args.readtype + ".events.txt", 'w')
+                    out = open(args.outdir + f5.filebasename + "." + args.readtype + ".events.txt", 'w')
                     if args.withheader:
                         out.write(f5.get_events_header_string(args.readtype))
                     out.write(f5.get_events_string(args.readtype))
