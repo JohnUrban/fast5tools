@@ -105,7 +105,7 @@ SAMPLE_RATE = "/Analyses/Basecall_2D_000/Configuration/general/sampling_rate" #0
 class Fast5(object):
     def __init__(self, filename):
         self.filename = filename
-        self.filebasename = (".").join(filename.split(".")[:-1])
+        self.filebasename = (".").join(filename.split("/")[-1].split(".")[:-1])
         self.abspath = os.path.abspath(filename)
         self.ATTR_2D = None
         self.ATTR_TEMP = None
