@@ -3,9 +3,9 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import f5class
-from f5ops import *
-from f5tableops import *
+import fast5tools.f5class
+from fast5tools.f5ops import *
+from fast5tools.f5tableops import *
 import argparse
 from glob import glob
 from collections import defaultdict
