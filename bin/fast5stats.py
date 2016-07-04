@@ -116,26 +116,26 @@ def get_error_fast5_stats(f5, delim="\t"):
 
 
 if __name__ == "__main__":
+    if args.verbose:
+        if args.verbose == 'stderr':
+            err = sys.stderr
+	else:
+            err = open(args.verbose,'w')
+    for f5 in Fast5List(args.fast5):
 	if args.verbose:
-		if args.verbose == 'stderr':
-			err = sys.stderr
-		else:
-			err = open(args.verbose,'w')
-	for f5 in Fast5List(args.fast5):
-		if args.verbose:
-			err.write(f5 + "\n")
-		if f5.is_not_corrupt() and f5.is_nonempty():
-			if f5.has_reads():
-				print get_fast5_stats(f5cmds, f5, args.delimiter)
-			else:
-				errfile.write( get_error_fast5_stats(f5, args.delimiter) + "\n" )
-		else:
-			errfile.write( f5fxn[19](f5) + "\t" + str(-1) + "\tCould-not-open,maybe-corrupt-or-empty.\n" )
+	    err.write(f5.filename + "\n")
+        if f5.is_not_corrupt() and f5.is_nonempty():
+	    if f5.has_reads():
+		print get_fast5_stats(f5cmds, f5, args.delimiter)
+	    else:
+		errfile.write( get_error_fast5_stats(f5, args.delimiter) + "\n" )
+	else:
+	    errfile.write( f5fxn[19](f5) + "\t" + str(-1) + "\tCould-not-open,maybe-corrupt-or-empty.\n" )
 
-	if args.errfile:
-		errfile.close()
-	if args.verbose:
-		if args.verbose != "stderr":
-			err.close()
+if args.errfile:
+    errfile.close()
+if args.verbose:
+    if args.verbose != "stderr":
+        err.close()
 
 
