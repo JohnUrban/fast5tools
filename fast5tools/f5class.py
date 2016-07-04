@@ -21,11 +21,13 @@ INPUT_EVENTS_PATH = "Analyses/EventDetection_000/Reads/" #01
 
 ATTR_TEMP = "/Analyses/Basecall_2D_000/Summary/basecall_1d_template/" #01
 ATTR_TEMP2 = "/Analyses/Basecall_1D_000/Summary/basecall_1d_template/"
+
 ATTR_COMP = "/Analyses/Basecall_2D_000/Summary/basecall_1d_complement/" #01
 ATTR_COMP2 = "/Analyses/Basecall_1D_000/Summary/basecall_1d_complement/"
 ATTR_2D = "/Analyses/Basecall_2D_000/Summary/basecall_2d" #01
 
-BASECALL_TEST = '/Analyses/Basecall_2D_000' #01
+BASECALL_TEST1 = '/Analyses/Basecall_1D_000' #01
+BASECALL_TEST2 = '/Analyses/Basecall_2D_000'
 
 GENERAL = "/Analyses/Basecall_2D_000/Configuration/general"
 GENERAL001 = "/Analyses/Basecall_1D_000/Configuration/general"
@@ -176,10 +178,17 @@ class Fast5(object):
             self.hdf5file.close()
     
     def basecalling_attempted(self):
+        detected = 0
         try:
-            self.f5[BASECALL_TEST]
-            return True
+            self.f5[BASECALL_TEST1]
+            detected += 1
+            self.f5[BASECALL_TEST2]
+            detected += 1
         except KeyError:
+            pass
+        if detected >= 1:
+            return True
+        else:
             return False
 
 

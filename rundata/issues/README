@@ -40,3 +40,18 @@ Traceback (most recent call last):
   File "h5o.pyx", line 190, in h5py.h5o.open (/private/var/folders/n1/37wvt0y95bx5b4hnp6r7hs4h0000gn/T/pip_build_johnurban/h5py/h5py/h5o.c:3555)
 KeyError: 'Unable to open object (Component not found)'
 
+
+
+July 4, 2016
+issue_007.fast5 -- came from lib13 pass folder -- may have been corrupted after moving/compressing/etc
+Originally: pass/newt_sciara_coprophila_library_013_embryomale_48hr_20150729_FloID_FAA48731_3001_1_ch69_file20_strand.fast5
+- It is in pass.
+- The log says it should have a complement....
+- There is no complement paths or 2D paths though....
+Although those observations are weird, the problem was with how basecalling is detected.
+The only basecall test I had is whether "/Analyses/Basecall_2D_000" was present.
+So actually, if no 2D attempts were made... I guess sometimes that path exists anyway.
+Else... I dont know what was happening previously in these cases.
+Now it checks if one or both are present:
+BASECALL_TEST1 = '/Analyses/Basecall_1D_000'
+BASECALL_TEST2 = '/Analyses/Basecall_2D_000'
