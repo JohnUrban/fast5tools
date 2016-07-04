@@ -5,7 +5,6 @@ import cStringIO as StringIO
 from Bio import SeqIO
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
-import fast5class.f5class
 import argparse
 from glob import glob
 
