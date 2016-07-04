@@ -55,6 +55,12 @@ parser.add_argument('--minq', type=float, default=0, help='''Only report reads w
 parser.add_argument('--maxq', type=float, default=int(10e3), help='''Only report reads with mean quality scores <= Q.
 Default: 10000 (this is orders of magnitude higher than normal max which are always < 20)''')
 
+parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
+The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
+The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
+Tarlite may become the default method after some testing if it performs at similar speeds.''')
+
 
 args = parser.parse_args()
 
@@ -152,7 +158,7 @@ def get_fast5tofastx_fxns(args):
 if __name__ == "__main__":
     output, getread = get_fast5tofastx_fxns(args)
 
-    for f5 in Fast5List(args.fast5):
+    for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
         if f5.is_not_corrupt() and f5.is_nonempty:
             read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output)
             if read:

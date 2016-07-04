@@ -83,6 +83,12 @@ If multiple fast5s are specified, they will be saved to files in the working dir
 This flag allows you to specify a different output directory.
 Filenames will be the the name of the fast5 file with .events.txt appended.''')
 
+parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
+The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
+The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
+Tarlite may become the default method after some testing if it performs at similar speeds.''')
+
 
 
 args = parser.parse_args()
@@ -113,7 +119,7 @@ if args.outdir:
 #################################################
 
 if __name__ == "__main__":
-    f5list = Fast5List(args.fast5)
+    f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
     if len(f5list) == 1: ## if only one f5, print to stdout
         for f5 in f5list:
             if f5.has_read(args.readtype):

@@ -69,6 +69,14 @@ to an error file.
 Error output for no template is: abs path to file, number events, Log information found.
 Error output for corrupt file that cannot be opened: abs path to file, -1, errmsg
 ''')
+
+
+parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
+The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
+The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
+Tarlite may become the default method after some testing if it performs at similar speeds.''')
+
 parser.add_argument('--verbose', type=str, default=False,
                     help='''Spit out information to progress file or stderr. Specify filename or 'stderr'. ''')
 
@@ -121,7 +129,7 @@ if __name__ == "__main__":
             err = sys.stderr
 	else:
             err = open(args.verbose,'w')
-    for f5 in Fast5List(args.fast5):
+    for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
 	if args.verbose:
 	    err.write(f5.filename + "\n")
         if f5.is_not_corrupt() and f5.is_nonempty():

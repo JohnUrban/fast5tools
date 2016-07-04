@@ -43,6 +43,13 @@ parser.add_argument('-y', '--y', type=int, default=8,
 parser.add_argument('-t', '--title', type=str, default="2D Seq len vs Mean Q-score",
                     help='''Provide title.''')
 
+parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
+The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
+The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
+Tarlite may become the default method after some testing if it performs at similar speeds.''')
+
+
 args = parser.parse_args()
 
 
@@ -70,7 +77,7 @@ def get_fast5_data(f5cmd, f5):
 if __name__ == "__main__":
     x = []
     y = []
-    for f5 in Fast5List(args.fast5):
+    for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
         x.append( get_fast5_data(args.x, f5) )
         y.append( get_fast5_data(args.y, f5) )
     print x

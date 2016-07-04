@@ -55,3 +55,6 @@ Else... I dont know what was happening previously in these cases.
 Now it checks if one or both are present:
 BASECALL_TEST1 = '/Analyses/Basecall_1D_000'
 BASECALL_TEST2 = '/Analyses/Basecall_2D_000'
+..
+I must have made a change in the code at some point that allowed this error to shine (or created it)...
+the reason being that it was giving this error on files that I had already successfully processed previously....
