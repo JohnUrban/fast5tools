@@ -69,7 +69,8 @@ to an error file.
 Error output for no template is: abs path to file, number events, Log information found.
 Error output for corrupt file that cannot be opened: abs path to file, -1, errmsg
 ''')
-
+parser.add_argument('--verbose', type=str, default=False,
+                    help='''Spit out information to progress file or stderr. Specify filename or 'stderr'. ''')
 
 
 args = parser.parse_args()
@@ -115,16 +116,26 @@ def get_error_fast5_stats(f5, delim="\t"):
 
 
 if __name__ == "__main__":
-    for f5 in f5class.Fast5List(args.fast5):
-        if f5.is_not_corrupt() and f5.is_nonempty():
-            if f5.has_reads():
-                print get_fast5_stats(f5cmds, f5, args.delimiter)
-            else:
-                errfile.write( get_error_fast5_stats(f5, args.delimiter) + "\n" )
-        else:
-            errfile.write( f5fxn[19](f5) + "\t" + str(-1) + "\tCould-not-open,maybe-corrupt-or-empty.\n" )
+	if args.verbose:
+		if args.verbose == 'stderr':
+			err = sys.stderr
+		else:
+			err = open(args.verbose,'w')
+	for f5 in f5class.Fast5List(args.fast5):
+		if args.verbose:
+			err.write(f5 + "\n")
+		if f5.is_not_corrupt() and f5.is_nonempty():
+			if f5.has_reads():
+				print get_fast5_stats(f5cmds, f5, args.delimiter)
+			else:
+				errfile.write( get_error_fast5_stats(f5, args.delimiter) + "\n" )
+		else:
+			errfile.write( f5fxn[19](f5) + "\t" + str(-1) + "\tCould-not-open,maybe-corrupt-or-empty.\n" )
 
-    if args.errfile:
-        errfile.close()
+	if args.errfile:
+		errfile.close()
+	if args.verbose:
+		if args.verbose != "stderr":
+			err.close()
 
 

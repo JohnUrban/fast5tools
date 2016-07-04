@@ -684,11 +684,16 @@ class Fast5List(object):
         try:
             return Fast5(self.allfiles.next())
         except Exception as e:
-            #sys.stderr.write("Stopping iteration..." + str(e) +"\n")
             if self._tars_detected and os.path.exists(F5_TMP_DIR):
                 shutil.rmtree(F5_TMP_DIR)
-##                print "CLEAN UP TAR DIR"
             raise StopIteration
+
+    ## I think ultimately one would need to be able to store info about which tarfile object a tar member belongs to (in case more than 1 tarfile)
+    ## then when going over the list one would need to check if its an existing file (e.g. os.exists(file)) and if not, is it in one of the tars...
+    ## if so, then extract it, load it into fast5. delete file. return fast5 object.
+    ## ultimately would be better to just be able to extract into memory and use directly.... but cant find a way to do that.
+    ## can also perhaps keep the tar unpacked.... not pre-expand... have the next function check:
+    ##  Is this fast5? is it an fofn? is it 
 
     def _initialize_tar_tmp_dir(self):
         if os.path.isdir(F5_TMP_DIR):
