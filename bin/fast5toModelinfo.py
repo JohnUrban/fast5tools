@@ -3,7 +3,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 from fast5tools.f5ops import *
 import argparse
 from glob import glob
@@ -101,7 +101,7 @@ def get_model_type(f5list):
 #################################################
 
 if __name__ == "__main__":
-    f5list = f5class.Fast5List(args.fast5)
+    f5list = Fast5List(args.fast5)
 ##    for f5 in f5list:
 ##        print f5.get_model_attrs_string("template")
 ##    quit()

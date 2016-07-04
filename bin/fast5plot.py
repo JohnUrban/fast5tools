@@ -4,7 +4,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 from fast5tools.f5ops import *
 import argparse
 from glob import glob
@@ -70,7 +70,7 @@ def get_fast5_data(f5cmd, f5):
 if __name__ == "__main__":
     x = []
     y = []
-    for f5 in f5class.Fast5List(args.fast5):
+    for f5 in Fast5List(args.fast5):
         x.append( get_fast5_data(args.x, f5) )
         y.append( get_fast5_data(args.y, f5) )
     print x

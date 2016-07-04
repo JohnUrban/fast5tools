@@ -3,7 +3,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 from fast5tools.f5ops import *
 import argparse
 from glob import glob
@@ -152,7 +152,7 @@ def get_fast5tofastx_fxns(args):
 if __name__ == "__main__":
     output, getread = get_fast5tofastx_fxns(args)
 
-    for f5 in f5class.Fast5List(args.fast5):
+    for f5 in Fast5List(args.fast5):
         if f5.is_not_corrupt() and f5.is_nonempty:
             read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output)
             if read:

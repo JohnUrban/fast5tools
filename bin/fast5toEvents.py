@@ -3,7 +3,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 from fast5tools.f5ops import *
 import argparse
 from glob import glob
@@ -113,7 +113,7 @@ if args.outdir:
 #################################################
 
 if __name__ == "__main__":
-    f5list = f5class.Fast5List(args.fast5)
+    f5list = Fast5List(args.fast5)
     if len(f5list) == 1: ## if only one f5, print to stdout
         for f5 in f5list:
             if f5.has_read(args.readtype):

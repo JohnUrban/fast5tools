@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import h5py, os, sys
-import fast5class.f5class
+from fast5class.f5class import *
 import argparse
 
 
@@ -42,8 +42,8 @@ args = parser.parse_args()
 #################################################
 
 if __name__ == "__main__":
-    A = f5class.Fast5List(args.dir1)
-    B = f5class.Fast5List(args.dir2)
+    A = Fast5List(args.dir1)
+    B = Fast5List(args.dir2)
     abase = set(A.get_basenames())
     bbase = set(B.get_basenames())
     adir = list(set(A.get_dirnames()))

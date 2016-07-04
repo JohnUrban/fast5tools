@@ -3,7 +3,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 from fast5tools.f5ops import *
 from fast5tools.f5tableops import *
 import argparse

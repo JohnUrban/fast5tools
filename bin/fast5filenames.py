@@ -4,7 +4,7 @@
 import h5py, os, sys
 import cStringIO as StringIO
 from Bio import SeqIO
-import fast5tools.f5class
+from fast5tools.f5class import *
 import argparse
 from glob import glob
 
@@ -33,6 +33,6 @@ args = parser.parse_args()
 
 
 if __name__ == "__main__":
-    for f in f5class.Fast5List(args.fast5, tar_filenames_only=True):
+    for f in Fast5List(args.fast5, tar_filenames_only=True):
         print f
 
