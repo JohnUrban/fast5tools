@@ -22,6 +22,7 @@ programs once fast5tools is installed.
 - fast5stats - generate a table with any fast5 info you want. 
 - fast5TableSummary -- in progress -- The intention was to be able to give summary stats for any table with any fast5 info in any order (so long as you can tell it the order).
 - fast5plot -- in progress. There are things in poreminion, squiggler, and poretools as well for plotting.
+- fast5TestFile -- run tests on given fast5 file(s)
 - fast5ToEvents -- self-explanatory
 - fast5ToModelinfo -- self-explanatory
 - fast5Tofastx -- convert to fasta, fastq, quals, integer quals -- or just details about the seqs (similar to fast5stats)
