@@ -1,5 +1,8 @@
+
 from fast5tools.hmm_class import *
 from fast5tools.tools import *
+
+
 
 class ParsedEvents(object):
     def __init__(self, events=None, f5=None, lead_size=50, hp_half_size=40, max_cutoff=90, max_second_cutoff=70, min_num_lg_events=3, end_trim_size=0, verbose=False):
@@ -11,7 +14,7 @@ class ParsedEvents(object):
         elif f5:
             self.events = f5.get_events_dict(readtype="input")
         self.nevents = len(self.events['mean'])
-        
+        print HMM
         ## find lead
         self.template_start, self.lead_state_path = lead_hmm(self.events['mean'][:lead_size])
 

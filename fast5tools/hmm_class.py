@@ -6,7 +6,6 @@ from profilehooks import profile
 from scipy.stats import norm
 
 
-from fast5tools.parsedEventsClass import *
 from fast5tools.tools import *
 
 STATES_ONEMERS = [''.join(e) for e in itertools.product("ACGT")]

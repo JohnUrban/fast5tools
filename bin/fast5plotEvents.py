@@ -5,7 +5,6 @@ import h5py, os, sys
 
 from fast5tools.f5class import *
 from fast5tools.hmm_class import *
-from fast5tools.adapters import *
 from fast5tools.parsedEventsClass import *
 
 import argparse
