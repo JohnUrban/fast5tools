@@ -14,7 +14,7 @@ class ParsedEvents(object):
         elif f5:
             self.events = f5.get_events_dict(readtype="input")
         self.nevents = len(self.events['mean'])
-        print HMM
+
         ## find lead
         self.template_start, self.lead_state_path = lead_hmm(self.events['mean'][:lead_size])
 
