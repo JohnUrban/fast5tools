@@ -1,4 +1,18 @@
 
+## for bardecoder
+def get_emissions_profile_probs(s, k, ket):
+    ''' s is a string composed of ACGT
+        k is kmer size (e.g. 5 or 6)
+        ket = kmer_emissions_table = a dict with the kmer emissions read in'''
+    npos = len(s)-k+1
+    emit_probs = np.zeros([2,npos])
+    for i in range(npos):
+        emit_probs[0,i] = ket[s[i:i+k]][0] #mu
+        emit_probs[1,i] = ket[s[i:i+k]][1]  #sigma
+    return emit_probs
+
+###end
+
 def complement(DNAstring):
     DNAstring = DNAstring.upper()
     compString = ''

@@ -1,6 +1,5 @@
 from fast5tools.hmm_class import *
 from fast5tools.tools import *
-##from fast5tools.adapters import *
 
 class ParsedEvents(object):
     def __init__(self, events=None, f5=None, lead_size=50, hp_half_size=40, max_cutoff=90, max_second_cutoff=70, min_num_lg_events=3, end_trim_size=0, verbose=False):
