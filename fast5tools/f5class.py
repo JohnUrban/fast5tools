@@ -150,7 +150,7 @@ class Fast5(object):
 ##            sys.stderr.write("Cannot open file: %s \n" % self.filename)
 ##            logger.warning("Cannot open file: %s" % self.filename)
             return False
-        
+    
     def is_nonempty(self):
         try:
             self.f5["Analyses"]
@@ -166,6 +166,9 @@ class Fast5(object):
         """
         if self.is_open:
             self.f5.close()
+            
+    def basecalling_detected(self):
+        return self._basecalling_attempted
 
     def is_not_corrupt(self):
         return self.is_open
@@ -592,6 +595,9 @@ class Fast5(object):
     def get_events(self, readtype):
         return self.f5[self._get_location_path(readtype,"Events")][()]
 
+    def yield_events(self, readtype): ## 20160705 -- make tests
+        yield self.f5[self._get_location_path(readtype,"Events")][()]
+
     def get_events_string(self, readtype):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_events(readtype)])
 
@@ -600,6 +606,49 @@ class Fast5(object):
 
     def get_events_header_string(self, readtype): ## 20160611-inprogress, make tests
         return ("\t").join([str(e) for e in self.get_events_header(readtype)])
+
+    def get_event_means(self, readtype):
+        return self.f5[self._get_location_path(readtype,"Events")]["mean"]
+
+    def get_event_stdevs(self, readtype):
+        try: ##basecalled files report stdv
+            return self.f5[self._get_location_path(readtype,"Events")]["stdv"]
+        except:
+            pass
+        try: ## files that are not basecalled report variance
+            return self.f5[self._get_location_path(readtype,"Events")]["variance"]**0.5
+        except:
+            return None
+        
+    def get_event_variance(self, readtype):
+        try:  ## files that are not basecalled report 
+            return self.f5[self._get_location_path(readtype,"Events")]["variance"]
+        except:
+            pass
+        try:  ##basecalled files report stdv
+            return self.f5[self._get_location_path(readtype,"Events")]["stdv"]**2
+        except:
+            return None
+
+    def get_event_lengths(self, readtype):
+        return self.f5[self._get_location_path(readtype,"Events")]["length"]
+
+    def get_event_start_times(self, readtype):
+        return self.f5[self._get_location_path(readtype,"Events")]["start"]
+
+    def get_event_flags(self): ## only present in non-basecalled files and seems to have shown up recently (e.g. first half of 2016)
+        try:
+            return self.f5[self._get_location_path(readtype="input",dataset="Events")]["flags"]
+        except:
+            return None
+
+    def get_events_dict(self, readtype):
+        ## make it (store in external variables)
+        events_dict = {}
+        for key in self.get_events_header(readtype):
+            events_dict[key] = self.f5[self._get_location_path(readtype,"Events")][key]
+        return events_dict
+        
 
     def get_model(self, readtype):
         return self.f5[self._get_location_path(readtype,"Model")][()]
