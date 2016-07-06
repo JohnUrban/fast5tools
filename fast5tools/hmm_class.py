@@ -2,8 +2,10 @@ import itertools
 import numpy as np
 import time
 from collections import defaultdict
-from profilehooks import profile
 from scipy.stats import norm
+
+##only for development
+##from profilehooks import profile 
 
 
 from fast5tools.tools import *
