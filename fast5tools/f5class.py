@@ -568,8 +568,8 @@ class Fast5(object):
     def _get_base_info_name(self):
         info = []
         info.append("channel_"+self.get_channel_number())
-##        info.append("file"+self.get_file_number())
         info.append(self.get_read_number())
+##        info.append("file_"+self.get_file_number())
 ##        info.append("run_"+self.get_run_id()) ## ASIC ID is different for different runs and sufficient enough to ensure read names from different runs are different
         info.append("asic_"+self.get_asic_id())
 ##            info.append(("-").join(self.get_time_stamp().split()))
