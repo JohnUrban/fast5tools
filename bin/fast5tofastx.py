@@ -33,13 +33,16 @@ If inside dir of dirs with .fast5 files, then can just do "*" to get all files f
 parser.add_argument('-r', '--readtype', default="mol",
                    type= str, 
                    help='''Choose type of fasta to get.
-Choices: 'template', 'complement', '2d', 'molecule', 'all'.
+Choices: 'template', 'complement', '2d', 'molecule', 'all', 'MoleQual'.
 Default: molecule.
-There is no need to write full word for options - can do: t, c, 2, m, a.
+There is no need to write full word for options - can do: t, c, 2, m, a, M.
 Molecule returns single fasta for each fast5 by following rules:
 if 2d present, return 2d.
 elif complement present with no 2d, return longer of template or complement.
-elif only template present, return template.''')
+elif only template present, return template.
+'MoleQual' is similar to molecule.
+It differs only in choosing between template and complement when a 2D is not present.
+Instead of choosing the longer one, it chooses the one with a higher quality mean quality score.''')
 
 parser.add_argument('-o', '--outtype', type=str, default="fasta",
                     help = '''Choices: fasta, fastq, qual, intqual, details.
@@ -70,7 +73,7 @@ args = parser.parse_args()
 ## deal with some of the arguments
 #################################################
 assert args.outtype in ("fasta", "fastq", "qual", "intqual", "details")
-assert args.readtype[0] in "tc2ma"
+assert args.readtype[0] in "tc2maM"
 if args.readtype[0] == "t":
     args.readtype = "template"
 elif args.readtype[0] == "c":
@@ -81,7 +84,8 @@ elif args.readtype[0] == "m":
     args.readtype = "molecule"
 elif args.readtype[0] == "a":
     args.readtype = "all"
-
+elif args.readtype[0] == "M":
+    args.readtype = "MoleQual"
 
 
 #################################################
@@ -146,6 +150,8 @@ def get_fast5tofastx_fxns(args):
         getread = get_molecule_read
     elif args.readtype == "all":
         getread = get_all_reads
+    elif args.readtype == "MoleQual":
+        getread = get_molequal_read
     return output, getread
 
 

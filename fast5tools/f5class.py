@@ -124,6 +124,7 @@ class Fast5(object):
             self._has_read["2d"] = self.has_2d()
             self._has_read["input"] = True # arbitrarily true for now
             self.molecule = None
+            self.molequal = None
             self.log = None
             self.fq_path = None
             self.given_name = {"template":None, "complement":None, "2d":None}
@@ -304,6 +305,23 @@ class Fast5(object):
         else:
             self.molecule = "template"
 
+    def _define_molequal(self): ## added July 6, 2016 -- copied/modified from define_molecule
+        ## if 2d, use 2d as molecule
+        ## **if both t and c present, use the one of higher quality** <- how it differs from molecule
+        ## if only t present, use t
+        ### NOTE: as is - when fast5 is "empty" (lacking even template), this gives answer as template
+        ### i.e. assumes non-empty
+        if self.has_read("2d"):
+            self.molequal = "2d"
+        elif self.has_read("complement"):
+            if int(self.get_mean_qscore("complement")) > int(self.get_mean_qscore("template")):
+                self.molequal = "complement"
+            else:
+                self.molequal = "template"
+        else:
+            self.molequal = "template"
+
+
     def _build_log(self):
         self.log = {}
         self.log["Calibration Strand Log \n"] = ""
@@ -350,6 +368,10 @@ class Fast5(object):
             self._define_molecule()
         return self.molecule
 
+    def use_molequal(self):
+        if self.molequal == None:
+            self._define_molequal()
+        return self.molequal
         
     def get_log_string(self):
         if self.log == None:
@@ -538,15 +560,18 @@ class Fast5(object):
         if self.info_name[readtype] == None:
             info = []
             info.append(readtype)
+            info.append("len_"+str(self.get_seq_len(readtype)))
+            info.append("Q_"+str(self.get_mean_qscore(readtype)))
             self.info_name[readtype] = ("_").join(info)
         return self.info_name[readtype] + "_" + self.base_info_name
     
     def _get_base_info_name(self):
         info = []
-        info.append("channel"+self.get_channel_number())
-        info.append("file"+self.get_file_number())
-        info.append("run"+self.get_run_id())
-        info.append("asic"+self.get_asic_id())
+        info.append("channel_"+self.get_channel_number())
+##        info.append("file"+self.get_file_number())
+        info.append(self.get_read_number())
+##        info.append("run_"+self.get_run_id()) ## ASIC ID is different for different runs and sufficient enough to ensure read names from different runs are different
+        info.append("asic_"+self.get_asic_id())
 ##            info.append(("-").join(self.get_time_stamp().split()))
         #could add start time, duration to help distinguish...
         self.base_info_name = ("_").join(info)
@@ -555,6 +580,7 @@ class Fast5(object):
         if self.base_info_name == None:
             self._get_base_info_name()
         return self.base_info_name
+
     
     def get_fastq(self, readtype):
         if self.has_read(readtype):

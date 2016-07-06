@@ -29,6 +29,10 @@ def get_2d_read(f5, minlen, maxlen, minq, maxq, output):
 def get_molecule_read(f5, minlen, maxlen, minq, maxq, output):
     return get_single_read(f5, f5.use_molecule(), minlen, maxlen, minq, maxq, output)
 
+def get_molequal_read(f5, minlen, maxlen, minq, maxq, output):
+    return get_single_read(f5, f5.use_molequal(), minlen, maxlen, minq, maxq, output)
+
+
 def get_all_reads(f5, minlen, maxlen, minq, maxq, output):
     allreads = ""
     for readtype in ["template", "complement", "2d"]:

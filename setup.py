@@ -9,7 +9,7 @@ if sys.version_info[0] != 2 or sys.version_info[1] < 7:
 
 setup(
     name="fast5tools",
-    version="0.0.1",
+    version="0.0.2",
     description="Tools for working with fast5 files (nanopore data).",
     author="John Urban",
     author_email="mr.john.urban@gmail.com", 
