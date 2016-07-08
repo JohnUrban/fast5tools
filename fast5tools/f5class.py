@@ -560,21 +560,23 @@ class Fast5(object):
         if self.info_name[readtype] == None:
             info = []
             info.append(readtype)
-            info.append("len_"+str(self.get_seq_len(readtype)))
-            info.append("Q_"+str(self.get_mean_qscore(readtype)))
-            self.info_name[readtype] = ("_").join(info)
-        return self.info_name[readtype] + "_" + self.base_info_name
+            info.append("len:"+str(self.get_seq_len(readtype)))
+            info.append("Q:"+str(self.get_mean_qscore(readtype)))
+            self.info_name[readtype] = ("|").join(info)
+        return self.info_name[readtype] + "|" + self.base_info_name
     
     def _get_base_info_name(self):
         info = []
-        info.append("channel_"+self.get_channel_number())
-        info.append(self.get_read_number())
+        info.append("channel:"+self.get_channel_number())
+        info.append((":").join(self.get_read_number().split("_")))
 ##        info.append("file_"+self.get_file_number())
-##        info.append("run_"+self.get_run_id()) ## ASIC ID is different for different runs and sufficient enough to ensure read names from different runs are different
-        info.append("asic_"+self.get_asic_id())
+        info.append("asic:"+self.get_asic_id())
+        info.append("run:"+self.get_run_id()) ## Though ASIC ID is different for different, if someone re-uses a flowcell, then it will not be. But I believe the RunID will be.... unless it is given the same tag dependent on ASIC ID and/or other constants
+        info.append("device:"+self.get_device_id())
+        info.append("model:"+self.get_model_type())
 ##            info.append(("-").join(self.get_time_stamp().split()))
         #could add start time, duration to help distinguish...
-        self.base_info_name = ("_").join(info)
+        self.base_info_name = ("|").join(info)
         
     def get_base_info_name(self):
         if self.base_info_name == None:

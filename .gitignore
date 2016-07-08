@@ -2,3 +2,4 @@
 *.egg-info
 TODO
 deldir
+gen_fastx.sh
