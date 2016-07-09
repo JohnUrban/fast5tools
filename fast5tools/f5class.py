@@ -5,6 +5,7 @@ import h5py, os, sys, tarfile, shutil
 import cStringIO as StringIO
 from Bio import SeqIO
 from glob import glob
+from random import randint
 
 #logging
 import logging
@@ -606,6 +607,34 @@ class Fast5(object):
                 self.quals_as_int[readtype] = StringIO.StringIO()
                 SeqIO.convert(StringIO.StringIO('\n'.join(['@'+self._get_pore_info_name(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])), "fastq", self.quals_as_int[readtype], "qual")
             return self.quals_as_int[readtype].getvalue().rstrip()
+
+    def falconize_name(self, readtype, zmw_num, style="old"):
+        if style == "old":
+            moviename = "m000_000"
+            otherinfo = self._get_pore_info_name(readtype)
+        elif style == "new":
+            info = []
+            info.append("asic:"+self.get_asic_id())
+            info.append("run:"+self.get_run_id())
+            info.append("device:"+self.get_device_id())
+            info.append("model:"+self.get_model_type())
+            moviename = ("|").join(info)
+            info = []
+            info.append(readtype)
+            info.append("Q:"+str(self.get_mean_qscore(readtype)))
+            info.append((":").join(self.get_read_number().split("_")))
+            info.append("channel:"+self.get_channel_number())
+            otherinfo = ("|").join(info)
+        return moviename + "/" + str(zmw_num) + "/0_"+str(self.get_seq_len(readtype)) + " " + otherinfo
+    
+
+    def get_falcon_fasta(self, readtype, zmw_num=None, style="old"):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            if zmw_num == None:
+                zmw_num = randint(0,1000000000000)
+            return '\n'.join([">"+self.falconize_name(readtype, zmw_num, style), self.seq[readtype]])
+
 
     def get_start_time(self, which):
         ## which in experiment, input, template, complement

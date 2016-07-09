@@ -5,7 +5,8 @@ import h5py, os, sys, tarfile, shutil
 ##import cStringIO as StringIO
 from Bio import SeqIO
 from glob import glob
-
+import datetime
+from random import randint
 
 
 ##class FastXMolecule(object):
@@ -557,6 +558,22 @@ class FastXSeqFromFast5(object):
     def get_fasta(self):
         return '\n'.join(['>'+self.fx.description, self.get_seq()])
 
+
+    def falconize_name(self, zmw_num, style="old"):
+        if style == "old":
+            moviename = "m000_000"
+            otherinfo = self.fx.description
+        elif style == "new":
+            moviename = "asic:"+self.get_asic_id() + "|run:"+self.get_run_id() + "|device:"+self.get_device_id() + "|model:"+self.get_model_type()
+            otherinfo = self.get_read_type() + "|Q:"+self.info['Q'] + "|Read:"+self.info['Read'] + "|channel:"+self.info['channel']
+        return moviename + "/" + str(zmw_num) + "/0_"+self.info['len'] + " " + otherinfo
+    
+    def get_falcon_fasta(self, zmw_num=None, style="old"):
+        if zmw_num == None:
+            zmw_num = randint(0,1000000000000)
+        return '\n'.join([">"+self.falconize_name(zmw_num, style), self.get_seq()])
+
+
     def get_sanger_quals(self):
         if not self.qualschecked:
             self._check_quals()
@@ -568,7 +585,7 @@ class FastXSeqFromFast5(object):
         return '\n'.join(['>'+self.fx.description, (" ").join([str(e) for e in self.int_quals()])])
 
 
-    def get_fastx_entry(self, outtype):
+    def get_fastx_entry(self, outtype, i):
         if outtype == "fasta":
             return self.get_fasta()
         elif outtype == "fastq":
@@ -577,6 +594,12 @@ class FastXSeqFromFast5(object):
             return self.get_sanger_quals()
         elif outtype == "intqual":
             return self.get_int_quals()
+        elif outtype == "falcon":
+            return self.get_falcon_fasta(i, "old")
+        elif outtype == "oldfalcon":
+            return self.get_falcon_fasta(i, "old")
+        elif outtype == "newfalcon":
+            return self.get_falcon_fasta(i, "new")
 
 
     def __str__(self):

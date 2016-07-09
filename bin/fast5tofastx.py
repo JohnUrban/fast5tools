@@ -45,9 +45,22 @@ It differs only in choosing between template and complement when a 2D is not pre
 Instead of choosing the longer one, it chooses the one with a higher quality mean quality score.''')
 
 parser.add_argument('-o', '--outtype', type=str, default="fasta",
-                    help = '''Choices: fasta, fastq, qual, intqual, details.
+                    help = '''Choices: fasta, fastq, qual, intqual, details, falcon, oldfalcon, newfalcon.
 Default: fasta.
-If details, sequence not reported, but name, seqlen, and meanq are.''')
+If details, sequence not reported, but name, seqlen, and meanq are.
+falcon/oldfalcon/newfalcon output fasta files that are compatible with FALCON assembler.
+falcon and oldfalcon put out the same thing and might be safest choice as it should work with old and new FALCON versions.
+newfalcon will only work with latest FALCON versions.
+The real issue is fasta2DB, which is particular about fasta headers.
+In older versions, it only allowed data from 1 SMRT cell per file.
+Now it allows multiple SMRT cells per file,
+only if all data from a given SMRT cell are grouped together.
+
+NOTE: if 'all' is used, for now each will be given the same well number.
+This could potentially have the side effect of using only the longest read in falcon,
+if '-a' is not used in DBsplit.
+To avoid this, just use '--outtype fasta', then use filterFast5DerivedFastx.py
+to convert the nanopore fasta headers to falcon-compatible fasta headers.''')
 
 parser.add_argument('--minlen', type=int, default=0, help='''Only report reads >= minlen. Default: 0 bp.''')
 
@@ -72,7 +85,7 @@ args = parser.parse_args()
 #################################################
 ## deal with some of the arguments
 #################################################
-assert args.outtype in ("fasta", "fastq", "qual", "intqual", "details")
+assert args.outtype in ("fasta", "fastq", "qual", "intqual", "details", "falcon", "oldfalcon", "newfalcon")
 assert args.readtype[0] in "tc2maM"
 if args.readtype[0] == "t":
     args.readtype = "template"
@@ -139,6 +152,10 @@ def get_fast5tofastx_fxns(args):
         output = intqual
     elif args.outtype == "details":
         output = details
+    elif args.outtype == "falcon" or args.outtype == "oldfalcon":
+        output = oldfalcon
+    elif args.outtype == "newfalcon":
+        output = newfalcon
     ### get readtype fxn ###
     if args.readtype == "template":
         getread = get_template_read
@@ -164,9 +181,11 @@ def get_fast5tofastx_fxns(args):
 if __name__ == "__main__":
     output, getread = get_fast5tofastx_fxns(args)
 
+    falcon_i = 0
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
         if f5.is_not_corrupt() and f5.is_nonempty:
-            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output)
+            falcon_i += 1
+            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output, falcon_i)
             if read:
                 print read
 

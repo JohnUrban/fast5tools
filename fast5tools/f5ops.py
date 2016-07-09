@@ -6,7 +6,7 @@ import os
 #### fast5tofastx.py, 
 #################################################
 
-def get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output):
+def get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output, *args, **kwargs):
     ''' f5 is Fast5 object.
         readtype in template, complement, 2d, molecule, all.
         minlen/maxlen - integers.
@@ -15,29 +15,29 @@ def get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output):
     if f5.has_read(readtype):
         if f5.get_seq_len(readtype) >= minlen and f5.get_seq_len(readtype) <= maxlen:
             if f5.get_mean_qscore(readtype) >= minq and f5.get_mean_qscore(readtype) <= maxq:
-                return output(f5, readtype)
+                return output(f5, readtype, *args, **kwargs)
 
-def get_template_read(f5, minlen, maxlen, minq, maxq, output):
-    return get_single_read(f5, "template", minlen, maxlen, minq, maxq, output)
+def get_template_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
+    return get_single_read(f5, "template", minlen, maxlen, minq, maxq, output, *args, **kwargs)
 
-def get_complement_read(f5, minlen, maxlen, minq, maxq, output):
-    return get_single_read(f5, "complement", minlen, maxlen, minq, maxq, output)
+def get_complement_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
+    return get_single_read(f5, "complement", minlen, maxlen, minq, maxq, output, *args, **kwargs)
 
-def get_2d_read(f5, minlen, maxlen, minq, maxq, output):
-    return get_single_read(f5, "2d", minlen, maxlen, minq, maxq, output)
+def get_2d_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
+    return get_single_read(f5, "2d", minlen, maxlen, minq, maxq, output, *args, **kwargs)
 
-def get_molecule_read(f5, minlen, maxlen, minq, maxq, output):
-    return get_single_read(f5, f5.use_molecule(), minlen, maxlen, minq, maxq, output)
+def get_molecule_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
+    return get_single_read(f5, f5.use_molecule(), minlen, maxlen, minq, maxq, output, *args, **kwargs)
 
-def get_molequal_read(f5, minlen, maxlen, minq, maxq, output):
-    return get_single_read(f5, f5.use_molequal(), minlen, maxlen, minq, maxq, output)
+def get_molequal_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
+    return get_single_read(f5, f5.use_molequal(), minlen, maxlen, minq, maxq, output, *args, **kwargs)
 
 
-def get_all_reads(f5, minlen, maxlen, minq, maxq, output):
+def get_all_reads(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
     allreads = ""
     for readtype in ["template", "complement", "2d"]:
         try:
-            allreads += get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output) + '\n'
+            allreads += get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output, *args, **kwargs) + '\n'
         except:
             pass
     return allreads.rstrip()
@@ -48,21 +48,24 @@ def get_all_reads(f5, minlen, maxlen, minq, maxq, output):
 #### e.g. used in get_single_read()
 #################################################
 
-def fastq(f5, readtype):
+def fastq(f5, readtype, *args, **kwargs):
     return f5.get_fastq(readtype)
 
-def fasta(f5, readtype):
+def fasta(f5, readtype, *args, **kwargs):
     return f5.get_fasta(readtype)
 
-def qual(f5, readtype):
+def qual(f5, readtype, *args, **kwargs):
     return f5.get_quals(readtype)
 
-def intqual(f5, readtype):
+def intqual(f5, readtype, *args, **kwargs):
     return f5.get_quals_as_int(readtype)
 
+def oldfalcon(f5, readtype, zmw_num, *args, **kwargs):
+    print readtype, zmw_num
+    return f5.get_falcon_fasta(readtype, zmw_num, "old")
 
-
-
+def newfalcon(f5, readtype, zmw_num, *args, **kwargs):
+    return f5.get_falcon_fasta(readtype, zmw_num, "new")
 
 #######
 f5fxn = {}
