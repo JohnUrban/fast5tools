@@ -793,6 +793,7 @@ class Fast5List(object):
         self.nfiles = None
         self.allfiles = None
         self.n_tars = 0
+        self.F5_TMP_DIR = None
         self.tars = {} ## for small footprint method
 ##        self._expand_list() ##TODO(?) - make expand fofn optional, so not wasting time in most situations
         self._extract_fast5_files()
@@ -809,8 +810,8 @@ class Fast5List(object):
                 if newfile.startswith("f5tar|"):
                     f5tar, key, tar_member = newfile.split("|")
                     tarkey = "f5tar|" + key + "|"
-                    self.tars[tarkey].extract(tar_member, path=F5_TMP_DIR)
-                    newfile = os.path.join(F5_TMP_DIR, tar_member)
+                    self.tars[tarkey].extract(tar_member, path=self.F5_TMP_DIR)
+                    newfile = os.path.join(self.F5_TMP_DIR, tar_member)
                     f5 = Fast5(newfile)
                     os.remove(newfile)
             else:
@@ -818,8 +819,8 @@ class Fast5List(object):
             return f5
         
         except Exception as e:
-            if self._tars_detected and os.path.exists(F5_TMP_DIR):
-                shutil.rmtree(F5_TMP_DIR)
+            if self._tars_detected and os.path.exists(self.F5_TMP_DIR):
+                shutil.rmtree(self.F5_TMP_DIR)
             raise StopIteration
         
            
@@ -832,10 +833,13 @@ class Fast5List(object):
     ##  Is this fast5? is it an fofn? is it 
 
     def _initialize_tar_tmp_dir(self):
-        if os.path.isdir(F5_TMP_DIR):
-            shutil.rmtree(F5_TMP_DIR)
+        if self.F5_TMP_DIR == None:
+            seed = str(randint(10000000000,99999999999))
+            self.F5_TMP_DIR = F5_TMP_DIR + "_" + seed
+        if os.path.isdir(self.F5_TMP_DIR):
+            shutil.rmtree(self.F5_TMP_DIR)
         self._tars_detected = True
-        os.mkdir(F5_TMP_DIR)
+        os.mkdir(self.F5_TMP_DIR)
 
 ##    def _expand_list(self):
 ##        #Goal: find fofns and tarballs in filelist and expand
@@ -859,9 +863,9 @@ class Fast5List(object):
 ##                if self.tar_filenames_only:
 ##                    files = [os.path.join(e,fname) for fname in f.getnames() if fname.endswith(".fast5")]
 ##                else: ## will be using files in tarball
-##                    f.extractall(path=F5_TMP_DIR)
+##                    f.extractall(path=self.F5_TMP_DIR)
 ##                    ## os.path.basename(filename).endswith('.fast5') and not os.path.basename(filename).startswith('.')
-##                    files = [os.path.join(F5_TMP_DIR, fname) for fname in f.getnames() if fname.endswith(".fast5")]
+##                    files = [os.path.join(self.F5_TMP_DIR, fname) for fname in f.getnames() if fname.endswith(".fast5")]
 ##                f.close()
 ##                expanded_fast5list += files
 ##            else:
@@ -909,9 +913,9 @@ class Fast5List(object):
                 files = [tarkey+fname for fname in f.getnames() if fname.endswith(".fast5")]
                 ## purposely do not close tarfile
             else:                  
-                f.extractall(path=F5_TMP_DIR) ## in situations where tarball includes many big non-fast5 files, this may not be best way.
+                f.extractall(path=self.F5_TMP_DIR) ## in situations where tarball includes many big non-fast5 files, this may not be best way.
                 ## os.path.basename(filename).endswith('.fast5') and not os.path.basename(filename).startswith('.')
-                files = [os.path.join(F5_TMP_DIR, fname) for fname in f.getnames() if fname.endswith(".fast5")]
+                files = [os.path.join(self.F5_TMP_DIR, fname) for fname in f.getnames() if fname.endswith(".fast5")]
                 f.close()
         return files
 
