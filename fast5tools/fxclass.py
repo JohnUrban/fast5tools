@@ -265,6 +265,9 @@ class FastXMolecule(object):
 
     def get_molecule_name(self):
         return self.molecule_name
+
+    def get_molecule_name_as_str(self, delim="_"):
+        return (delim).join([str(e) for e in self.molecule_name])
     
     def has_template(self):
         return self._has["template"]
@@ -341,6 +344,24 @@ class FastXMolecule(object):
 ##                    self.get_read(readtype).passes_filter(readtype, minlen, maxlen, minq, maxq, channel, readnum, asic, runid, deviceid, modelid)
         
 
+
+    def get_molecule_stats(self):
+        molecule_stats = []
+        molecule_stats.append(self.get_molecule_name_as_str())
+        molecule_stats.append(self.molecule().get_seq_len())
+        molecule_stats.append(int(self.has_complement()))
+        molecule_stats.append(int(self.has_2d()))
+        molecule_stats.append(self.twod().get_seq_len()) if self.has_2d() else molecule_stats.append("-")
+        molecule_stats.append(self.template().get_seq_len()) if self.has_template() else molecule_stats.append("-")
+        molecule_stats.append(self.complement().get_seq_len()) if self.has_complement() else molecule_stats.append("-")
+        molecule_stats.append(self.twod().get_mean_qscore()) if self.has_2d() else molecule_stats.append("-")
+        molecule_stats.append(self.template().get_mean_qscore()) if self.has_template() else molecule_stats.append("-")
+        molecule_stats.append(self.complement().get_mean_qscore()) if self.has_complement() else molecule_stats.append("-")
+        return molecule_stats 
+
+    def get_molecule_stats_string(self, delim="\t"):
+        return (delim).join([str(e) for e in self.get_molecule_stats()])
+                                                                                                                   
 
 ##        if filter_rule == "and":
 ##            return self.is_in_intersect(minlen, maxlen, minq, maxq, readtype, channel, readnum, asic, run, device, model)
@@ -803,9 +824,6 @@ class FastXFileList(object):
 
     def get_dirnames(self):
         return [os.path.dirname(e) for e in self.files]
-
-
-
 
 
 
