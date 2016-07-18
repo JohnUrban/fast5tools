@@ -72,6 +72,7 @@ parser.add_argument('-r', '--readtype', default="all",
 Choices: 'template', 'complement', '2d', 'molecule', 'all', 'MoleQual'.
 Default: all.
 There is no need to write full word for options - can do: t, c, 2, m, a, M.
+CAUTION: for now, if the word given begins with "m" it is "molecule"; if "M", it is MoleQual. This means that 'molequal' will return 'molecule' results. etc.
 Molecule returns single fastx for when there is more than 1 record for a given Channel#/Read#/Run_ID/ASIC_ID:
 if 2d present, return 2d.
 elif complement present with no 2d, return longer of template or complement.

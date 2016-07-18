@@ -332,11 +332,12 @@ class FastXMolecule(object):
         else:
             return [readtype]
         
-    def get_fastx_entry(self, readtype, outtype):
+    def get_fastx_entry(self, readtype, outtype, i):
+        ## i is for falconizing name
         for rtype in self._get_read_type_list(readtype):
             if self._has[readtype]:
 ##                    if self.passes_filter(readtype, minlen, maxlen, minq, maxq, channel, readnum, asic, runid, deviceid, modelid):
-                return self.get_read(readtype).get_fastx_entry(outtype)
+                return self.get_read(readtype).get_fastx_entry(outtype, i)
 ##                    self.get_read(readtype).passes_filter(readtype, minlen, maxlen, minq, maxq, channel, readnum, asic, runid, deviceid, modelid)
         
 
