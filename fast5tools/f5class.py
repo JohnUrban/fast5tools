@@ -809,8 +809,7 @@ class Fast5List(object):
     def next(self):
         try:
             newfile = self.allfiles.next()
-            if self.keep_tar_footprint_small:
-                if newfile.startswith("f5tar|"):
+            if self.keep_tar_footprint_small and newfile.startswith("f5tar|"):
                     f5tar, key, tar_member = newfile.split("|")
                     tarkey = "f5tar|" + key + "|"
                     self.tars[tarkey].extract(tar_member, path=self.F5_TMP_DIR)
