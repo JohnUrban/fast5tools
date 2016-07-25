@@ -54,7 +54,8 @@ parser.add_argument('-p', '--plottype', type=str, default='scatter',
 
 parser.add_argument('-a', '--adapters', action='store_true', default=False,
                     help='''Highlight adapter sequences. Default: False.''')
-
+parser.add_argument('-AF', '--adapterfxn', type=int, default=1,
+                    help='''When highlighting adapter sequences, find adapters with fxn 1 (older hairpins) or 2 (newer hairpins). Default: 1. Fxn2 is not well-tested - experimental.''')
 parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
 The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
 The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
@@ -92,13 +93,17 @@ def plotter(x,y,start,end,events_dict, col='b'):
     elif args.plottype == "line":
         plt.plot(events_dict[x][start:end], events_dict[y][start:end], c=col)
 
-def parser(f5, events=None):
+def parser(f5, events=None, hpfxn=1):
 ##    if f5.basecalling_detected(): ## TODO: just get coordinates of adapters from fast5 file
 ##            parsed_events = ParsedEvents(f5=f5) ## for now just filling in with adapter finding fxn
 ##    else: ## find coordinates 
 ##        parsed_events = ParsedEvents(events=events)
 ##    parsed_events = ParsedEvents(events=events)
-    parsed_events = ParsedEvents(f5=f5)
+    if hpfxn==1:
+        halfsize=40
+    elif hpfxn==2:
+        halfsize=100
+    parsed_events = ParsedEvents(f5=f5, hp_half_size=halfsize, hpfxn=hpfxn)
     return parsed_events
 
 #################################################
@@ -123,7 +128,7 @@ if __name__ == "__main__":
 
         plotter(args.x, args.y, 0, nevents, events_dict)
         if args.adapters:
-            parsed_events = parser(f5)
+            parsed_events = parser(f5, hpfxn=args.adapterfxn)
             plotter(args.x, args.y, 0, parsed_events.template_start-1, events_dict, col='r')
             if parsed_events.hairpin_detected:
                 plotter(args.x, args.y, parsed_events.hpstart, parsed_events.complement_start, events_dict, col='r')

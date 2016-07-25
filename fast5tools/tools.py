@@ -1,3 +1,4 @@
+from collections import defaultdict
 
 ## for bardecoder
 def get_emissions_profile_probs(s, k, ket):
@@ -72,6 +73,19 @@ def read_model_file(model_file, variantcolumn=False):
         keys = ["kmer","level_mean","level_stdv","sd_mean","sd_stdv","weight"]
         types = [str] + [float]*5
     return read_table(model_file, keys, types)
+
+
+
+def read_model_file2(model_file):
+    types = [str] + [float]*5
+    data = open(model_file).readlines()
+    table = defaultdict(list)
+    for i in range(len(data)):
+        line = data[i].strip().split("\t")
+        line = [types[j](line[j]) for j in range(len(line))]
+        table[line[0]] = line[1:]
+    return table
+
 
 
 def read_events_file(events_file, input_events=False):

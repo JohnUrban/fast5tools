@@ -206,7 +206,15 @@ class HMM(object):
             scalefactors[0,k] = sum(Forward[:,k])
             scalefactors[1,k] = np.log(scalefactors[0,k]) + scalefactors[1,k-1]
             Forward[:,k] /= scalefactors[0,k]
-        return Forward, scalefactors
+        self.Forward = Forward
+        self.Forward_scalefactors = scalefactors
+
+    def get_forward_matrix(self):
+        try:
+            return self.Forward
+        except:
+            self.forward()
+            return self.Forward
 
     def backward(self):
         nstates = self.get_num_states()
@@ -229,24 +237,37 @@ class HMM(object):
             scalefactors[0,k] = sum(Backward[:,k])
             scalefactors[1,k] = np.log(scalefactors[0,k]) + scalefactors[1,k+1]
             Backward[:,k] /= scalefactors[0,k]
-        return Backward, scalefactors
+        self.Backward = Backward
+        self.Backwars_scalefactors = scalefactors
 
-    def posterior_decoding(self, Forward, F_scales, Backward, B_scales):
+    def get_backward_matrix(self):
+        try:
+            return self.Backward
+        except:
+            self.backward()
+            return self.Backward
+
+    def posterior_decoding(self):
         ##F and B are scaled long seq matrices -- the scales are scalefactors that come with them out of long fxns
+        ## ensure F and B available
+        self.get_forward_matrix()
+        self.get_backward_matrix()
         nstates = self.get_num_states()
-        nemits = np.shape(Forward)[1]
-        posterior_path = np.zeros(nemits, dtype=int)
+        nemits = np.shape(self.Forward)[1]
+        self.posterior_path = np.zeros(nemits, dtype=int)
         for i in xrange(nemits):
-            fb = Forward[:,i] * Backward[:,i]
-            posterior_path[i] = int(fb.argmax())
-        return posterior_path
+            fb = self.Forward[:,i] * self.Backward[:,i]
+            self.posterior_path[i] = int(fb.argmax())
+        return self.posterior_path
 
-    def prob_data(Forward, scalefactors, nemits=None):
+    def prob_data(self, nemits=None):
+        #ensure forward available
+        self.get_forward_matrix()
         if nemits == None:
-            end = np.shape(Forward)[1]-1
+            end = np.shape(self.Forward)[1]-1
         else:
             end = nemits-1
-        return sum(Forward[:,end])*np.exp(scalefactors[1,end])
+        return sum(self.Forward[:,end])*np.exp(self.Forward_scalefactors[1,end])
 
 ##    @profile
 
@@ -317,18 +338,18 @@ class HMM(object):
         return edit_dist, ident, 100.0*ident/len(src)
 
 
-    def baumwelch():
+    def baumwelch(self):
         pass
 
     def nwalign(self, s2, s1=None):
         return nw.global_align(s1, s2)
-    def compare_seq_nwa(s1,s2):
+    def compare_seq_nwa(self, s1,s2):
         s1, s2 = nwalign(s1,s2)
         length = len(s1)
         dist = edit_dist(s1,s2,length)
         return dist, pct_id(length,dist)
 
-    def combine_2_seq(s1,s2, length=None):
+    def combine_2_seq(self, s1,s2, length=None):
         '''Assumes length s1 == length s2 '''
         s1,s2 = nwalign(s1,s2)
         if length == None:
@@ -349,46 +370,46 @@ class HMM(object):
                 combinedseq += s1[i]
         return combinedseq, editdist
 
-    def compare_seq_nwa(s1,s2):
+    def compare_seq_nwa(self, s1,s2):
         s1, s2 = nwalign(s1,s2)
         length = len(s1)
         dist = edit_dist(s1,s2,length)
         return dist, pct_id(length,dist)
 
-    def get_2D_seq(t,c):
+    def get_2D_seq(self, t,c):
         c = complement(c)
         return combine_2_seq(t,c)
 
-    def get_sequence_withgaps(states, statepath, checkoverlap=True, posterior_decoded=False):
+    def get_sequence_withgaps(self, statepath, checkoverlap=True, posterior_decoded=False):
         ## states are some type of kmer
         ## statepath is vector of numbers (indexes)
         path_length = len(statepath)
         moves = [0]*path_length ## first move is 0
-        k = len(states[0])
+        k = len(self.states[0])
         end = k-1
         if k == 1 or k == 2:
             return "This currently only works with 3-mers as smallest kmer."
         else:
             #init
-            seq = states[statepath[0]]
+            seq = self.states[statepath[0]]
             moves[0] = 0
             #iter
             for i in range(1,path_length):
-                lastSuffix = states[statepath[i-1]][1:]
-                currentPrefix = states[statepath[i]][:k-1]
+                lastSuffix = self.states[statepath[i-1]][1:]
+                currentPrefix = self.states[statepath[i]][:k-1]
                 if statepath[i-1] == statepath[i]:
                     moves[i] = 0
                 elif lastSuffix == currentPrefix:
-                    seq += states[statepath[i]][end]
+                    seq += self.states[statepath[i]][end]
                     moves[i] = 1
                 else:
-                    lastSuffix = states[statepath[i-1]][2:]
-                    currentPrefix = states[statepath[i]][:k-2]
+                    lastSuffix = self.states[statepath[i-1]][2:]
+                    currentPrefix = self.states[statepath[i]][:k-2]
                     if lastSuffix == currentPrefix:
-                        seq += states[statepath[i]][end-1:]
+                        seq += self.states[statepath[i]][end-1:]
                         moves[i] = 2
                     elif posterior_decoded:
-                        seq += states[statepath[i]][end]
+                        seq += self.states[statepath[i]][end]
                         moves[i] = -1 
                         ## -1 means it was an "illegal" move (move to a kmer that does not overlap by k-1 or k-2)
                         ## it turns out that adding the base from the illegal move does not hurt the seq overall much

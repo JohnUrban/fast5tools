@@ -536,7 +536,10 @@ class Fast5(object):
         return self.f5[self.GENERAL_PATH].attrs["tag"]
 
     def get_model_type(self):
-        return self.f5[self.GENERAL_PATH].attrs['model_type']
+        if self.basecalling_detected():
+            return self.f5[self.GENERAL_PATH].attrs['model_type']
+        else:
+            return "NA"
 
 
     def get_basename(self):

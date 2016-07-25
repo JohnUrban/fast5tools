@@ -51,6 +51,11 @@ grep ">" file.fasta | awk 'OFS="\t" {sub(/>/,""); gsub(/\|/,"\t"); gsub(/:/,"\t"
 
 I have added 'fast5DerivedFastaReadStats.sh' to the tools in the bin directory that does just this.
 
+
+TODO:
+Allow filtering as done in filterFast5DerivedFastx.py.
+It is already set up to do so -- just need to enable it... test it...
+
 John Urban (2016)
 
     """, formatter_class = argparse.RawTextHelpFormatter)

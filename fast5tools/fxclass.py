@@ -259,6 +259,7 @@ class FastXMolecule(object):
         ##
         if self.is_empty():
             self.molecule_name = fx.get_molecule_name()
+            self.base_info_name = fx.get_base_info_name()
         if self.is_insertable(fx):
             self.reads[fx.get_read_type()] = fx
             self._has[fx.get_read_type()] = True
@@ -268,6 +269,9 @@ class FastXMolecule(object):
 
     def get_molecule_name_as_str(self, delim="_"):
         return (delim).join([str(e) for e in self.molecule_name])
+        
+    def get_base_info_name(self):
+        return self.base_info_name
     
     def has_template(self):
         return self._has["template"]
@@ -347,8 +351,10 @@ class FastXMolecule(object):
 
     def get_molecule_stats(self):
         molecule_stats = []
-        molecule_stats.append(self.get_molecule_name_as_str())
+##        molecule_stats.append(self.get_molecule_name_as_str())
+        molecule_stats.append(self.get_base_info_name())
         molecule_stats.append(self.molecule().get_seq_len())
+        molecule_stats.append(self.molecule().get_mean_qscore())
         molecule_stats.append(int(self.has_complement()))
         molecule_stats.append(int(self.has_2d()))
         molecule_stats.append(self.twod().get_seq_len()) if self.has_2d() else molecule_stats.append("-")
@@ -391,6 +397,8 @@ class FastXSeqFromFast5(object):
         self.parse_fx_name()
         self._len_correct = None
         self.qualschecked = False
+        self.base_info_name = None
+        self.info_name = None
         
     def parse_fx_name(self):
         info = self.fx.name.split("|")
@@ -398,6 +406,44 @@ class FastXSeqFromFast5(object):
         for i in range(1,len(info)):
             key, value = info[i].split(":")
             self.info[key] = value
+
+    def _get_base_info_name(self):
+        info = []
+        info.append("channel:"+self.get_channel())
+        info.append("Read:" + self.get_read_number() )
+        info.append("asic:"+self.get_asic_id())
+        info.append("run:"+self.get_run_id()) 
+        info.append("device:"+self.get_device_id())
+        info.append("model:"+self.get_model_type())
+        self.base_info_name = ("|").join(info)
+        
+    def get_base_info_name(self):
+        if self.base_info_name == None:
+            self._get_base_info_name()
+        return self.base_info_name
+
+    def _get_pore_info_name(self):
+        ##should be same as get_name
+        if self.base_info_name == None:
+            self._get_base_info_name()
+        if self.info_name == None:
+            info = []
+            info.append(self.get_read_type())
+            info.append("len:"+str(self.get_seq_len()))
+            info.append("Q:"+str(self.get_mean_qscore()))
+            self.info_name = ("|").join(info)
+        return self.info_name[readtype] + "|" + self.base_info_name
+
+    def get_name(self):
+        return self.fx.name
+
+    def get_description(self):
+        return self.fx.description
+
+    def get_molecule_name(self):
+        ## return tuple, string, ..? right now its a tuple.
+        return (self.get_asic_id(), self.get_run_id(), self.get_channel(), self.get_read_number())
+    
 
     def determine_read_type(self):
         if self.info['readtype'] in ('2d','2D'):
@@ -414,16 +460,6 @@ class FastXSeqFromFast5(object):
             self._is_complement = False
         assert sum([self._is_2d, self._is_template, self._is_complement]) == 1
 
-    def get_name(self):
-        return self.fx.name
-
-    def get_description(self):
-        return self.fx.description
-
-    def get_molecule_name(self):
-        ## return tuple, string, ..? right now its a tuple.
-        return (self.get_asic_id(), self.get_run_id(), self.get_channel(), self.get_read_number())
-    
     def get_seq(self):
         return str(self.fx.seq)
 

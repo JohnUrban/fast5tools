@@ -20,23 +20,24 @@ John Urban (2015)
 
 1 = base_info_name
 2 = molecule length
-3 = has complement
-4 = has 2d
-5 = 2d seq len
-6 = template seq len
-7 = complement seq len
-8 = 2d mean q score
-9 = template mean q score
-10 = complement mean q score
-11 = num input events
-12 = num template events
-13 = num complement events
-14 = num called template events
-15 = num called complement events
-16 = num skips in template
-17 = num skips in complement
-18 = fast5 filename (path as given)
-19 = fast5 filename (absolute path)
+3 = molecule mean q score
+4 = has complement
+5 = has 2d
+6 = 2d seq len
+7 = template seq len
+8 = complement seq len
+9 = 2d mean q score
+10 = template mean q score
+11 = complement mean q score
+12 = num input events
+13 = num template events
+14 = num complement events
+15 = num called template events
+16 = num called complement events
+17 = num skips in template
+18 = num skips in complement
+19 = fast5 filename (path as given)
+20 = fast5 filename (absolute path)
 
 John Urban (2015, 2016)
 
