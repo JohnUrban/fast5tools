@@ -1,3 +1,4 @@
+import numpy as np
 
 ## for bardecoder
 def get_emissions_profile_probs(s, k, ket):
@@ -28,9 +29,12 @@ def reverse_seq(DNAstring):
     return DNAstring[-1::-1]
 
 def max_and_index(x):
-    i=x.argmax()
-    m=x[i]
-    return i,m
+    if x.size:
+        i=x.argmax()
+        m=x[i]
+        return i,m
+    else:
+        return np.array([]), np.array([])
 
 
 def update_table_dict(d,l,keys, length=None):

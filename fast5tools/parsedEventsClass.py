@@ -148,7 +148,7 @@ def hp_hmm(events,trim=0):
     while vpath[hpstart] < 1:
         hpstart += 1
     hpend = len(vpath)-1
-    while vpath[hpend] > 5:
+    while hpend & vpath[hpend] > 5:
         hpend -= 1
     return hpstart-trim, hpend+trim, vpath
 

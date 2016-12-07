@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 ##from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+import os
 
 #################################################
 ## Argument Parser
@@ -54,6 +55,9 @@ parser.add_argument('-p', '--plottype', type=str, default='scatter',
 
 parser.add_argument('-a', '--adapters', action='store_true', default=False,
                     help='''Highlight adapter sequences. Default: False.''')
+
+parser.add_argument('-o', '--outdir', default=None,
+                    help='''Directory of where to save plots. If none given, plots will not be saved.''')
 
 parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
 The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
@@ -128,6 +132,8 @@ if __name__ == "__main__":
             if parsed_events.hairpin_detected:
                 plotter(args.x, args.y, parsed_events.hpstart, parsed_events.complement_start, events_dict, col='r')
         
+        if args.outdir:
+            plt.savefig(os.path.join(args.outdir, '%s.png' % f5.filebasename))
+
         plt.show()
-    
 
