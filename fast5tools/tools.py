@@ -1,4 +1,5 @@
 import numpy as np
+from collections import defaultdict
 
 ## for bardecoder
 def get_emissions_profile_probs(s, k, ket):
@@ -78,6 +79,19 @@ def read_model_file(model_file, variantcolumn=False):
     return read_table(model_file, keys, types)
 
 
+
+def read_model_file2(model_file):
+    types = [str] + [float]*5
+    data = open(model_file).readlines()
+    table = defaultdict(list)
+    for i in range(len(data)):
+        line = data[i].strip().split("\t")
+        line = [types[j](line[j]) for j in range(len(line))]
+        table[line[0]] = line[1:]
+    return table
+
+
+
 def read_events_file(events_file, input_events=False):
     ''' file may contain input, template, or complement events '''
     if input_events:
@@ -87,4 +101,7 @@ def read_events_file(events_file, input_events=False):
         keys = ["mean", "stddev",  "start", "length", "model_state", "model_level", "move", "p_model_state", "mp_state", "p_mp_state", "p_A", "p_C", "p_G", "p_T"]
         types = [float]*4 + [str] + [float]*3 + [str] + [float]*5
     return read_table(events_file, keys, types)
+
+
+
 

@@ -5,7 +5,7 @@ from fast5tools.tools import *
 
 
 class ParsedEvents(object):
-    def __init__(self, events=None, f5=None, lead_size=50, hp_half_size=40, max_cutoff=90, max_second_cutoff=70, min_num_lg_events=3, end_trim_size=0, verbose=False):
+    def __init__(self, events=None, f5=None, lead_size=50, hp_half_size=40, max_cutoff=90, max_second_cutoff=70, min_num_lg_events=3, end_trim_size=0, verbose=False, hpfxn=1):
         ## events is events dict captured from fast5class
         ## if f5class object provided, it can capture the events automatically
         assert (events is not None) or (f5 is not None)
@@ -16,7 +16,8 @@ class ParsedEvents(object):
         self.nevents = len(self.events['mean'])
 
         ## find lead
-        self.template_start, self.lead_state_path = lead_hmm(self.events['mean'][:lead_size])
+        self.lead_hmm = build_lead_hmm(self.events['mean'][:lead_size])
+        self.template_start, self.lead_state_path = lead_hmm_viterbi(self.lead_hmm)
 
         ## find max emission and its index (searching for HP candidate region)
         ## remove Lead Adapter on 5' of template and 3' of complement which can also have high values
@@ -34,8 +35,11 @@ class ParsedEvents(object):
             self.hairpin_detected = True
                 
             ## find the starting and ending coordinates of the hairpin in this selected region
-            self.hpstart_in_region, self.hpend_in_region, self.hp_state_path = hp_hmm(self.events['mean'][(self.maxindex-hp_half_size):(self.maxindex+hp_half_size)])
-            
+            if hpfxn==1:
+                self.hpstart_in_region, self.hpend_in_region, self.hp_state_path = hp_hmm(self.events['mean'][(self.maxindex-hp_half_size):(self.maxindex+hp_half_size)])
+            elif hpfxn==2:
+                self.hpstart_in_region, self.hpend_in_region, self.hp_state_path = hp2_hmm(self.events['mean'][(self.maxindex-hp_half_size):(self.maxindex+hp_half_size)])
+
             ## get hp coord adjusted to starting event
             self.hpstart =  self.hpstart_in_region + (self.maxindex-hp_half_size)
             self.hpend = self.hpend_in_region + (self.maxindex-hp_half_size)
@@ -75,7 +79,7 @@ class ParsedEvents(object):
                             
 
 
-def lead_hmm(first_N_events):
+def lead_hmm():
     ## 15 states: 0:14, states 0:13 part of lead profile, state14 is end/template state
     emit_probs = np.zeros([2,15]) 
     ## means
@@ -102,21 +106,50 @@ def lead_hmm(first_N_events):
     tran_probs[13,14] = 0.2
     ## normalize all rows to 1
     for i in range(14): tran_probs[i,:] = tran_probs[i,:]/sum(tran_probs[i,:])
+    return emit_probs, init_probs, tran_probs
 
+def build_lead_hmm(first_N_events):
+    emit_probs, init_probs, tran_probs = lead_hmm()
     ## get viterbi path for lead adapter coordinates
     hmm = HMM(states=range(len(init_probs)), emissions=first_N_events)
     hmm.add_initial_probs(init_probs)
     hmm.add_transition_probs(tran_probs)
     hmm.add_emission_probs(emit_probs)
-    vpath, vprob = hmm.viterbi()
+    return hmm
+
+def lead_hmm_viterbi(lead_hmm):
+##    emit_probs, init_probs, trans_probs = lead_hmm()
+##    ## get viterbi path for lead adapter coordinates
+##    hmm = HMM(states=range(len(init_probs)), emissions=first_N_events)
+##    hmm.add_initial_probs(init_probs)
+##    hmm.add_transition_probs(tran_probs)
+##    hmm.add_emission_probs(emit_probs)
+##    hmm = build_lead_hmm(first_N_events)
+    vpath, vprob = lead_hmm.viterbi()
     template_start = 0
     try:
         while vpath[template_start] != 14:
             template_start += 1
     except IndexError: ## if profile HMM does not find template start in 1st 50, then assume start is at 50
-        template_start = len(first_N_events)
+        template_start = len(lead_hmm.emissions)
     return template_start, vpath
     
+##def lead_hmm_posterior(lead_hmm):
+##    emit_probs, init_probs, trans_probs = lead_hmm()
+##    ## get viterbi path for lead adapter coordinates
+##    hmm = HMM(states=range(len(init_probs)), emissions=first_N_events)
+##    hmm.add_initial_probs(init_probs)
+##    hmm.add_transition_probs(tran_probs)
+##    hmm.add_emission_probs(emit_probs)
+##    vpath, vprob = hmm.posterior_decoding()
+##    template_start = 0
+##    try:
+##        while vpath[template_start] != 14:
+##            template_start += 1
+##    except IndexError: ## if profile HMM does not find template start in 1st 50, then assume start is at 50
+##        template_start = len(first_N_events)
+##    return template_start, vpath
+
 
 def hp_hmm(events,trim=0):
     ## state B,1,2,3,4,5,E = 7 states
@@ -152,4 +185,40 @@ def hp_hmm(events,trim=0):
         hpend -= 1
     return hpstart-trim, hpend+trim, vpath
 
+def hp2_hmm(events,trim=0):
+    ## 2016Jul25 -- NOT WELL-TESTED AT ALL, just for playing aorund
+    ## state B,1,2,3,4,5,E = 7 states
+    emit_probs = np.zeros([2,10])
+    emit_probs[0,] = [35, 65.0, 93.78638, 110, 80, 117.49618, 100.67429, 60.19801, 46.50402, 65.0]
+    emit_probs[1,] = [5, 6.0, 6.787453, 10, 10, 8.665963, 4.354063, 6.305904, 1.931336, 6.0]
+    init_probs = np.array([0.7,0.2,0.1,0,0,0,0,0,0,0])
+    init_probs = init_probs/sum(init_probs)
+    tran_probs = np.zeros([10,10])
+    tran_probs[9,9] = 1.0
+    for i in range(10): tran_probs[i,i] = 0.3
+    for i in range(9): tran_probs[i,i+1] = 0.35
+    for i in range(8): tran_probs[i,i+2] = 0.2
+    for i in range(7): tran_probs[i,i+3] = 0.1
+    for i in range(6): tran_probs[i,i+4] = 0.001
+    for i in range(5): tran_probs[i,i+5] = 0.001
+    for i in range(4): tran_probs[i,i+6] = 0.0001
+    for i in range(3): tran_probs[i,i+7] = 0.00001
+    for i in range(2): tran_probs[i,i+8] = 0.000001
+    tran_probs[6,8] = 0.05
+    tran_probs[7,9] = 0.1
+    tran_probs[7,8] = 0.7 ## state 7 usually goes directly to 5 (occasionally 2 events, but have not seen more -- all other states tend to stay in-state longer)
+    for i in range(9): tran_probs[i,] = tran_probs[i,:]/sum(tran_probs[i,:])
 
+    ## get viterbi path for hairpin adapter coordinates
+    hmm = HMM(states=range(len(init_probs)), emissions=events)
+    hmm.add_initial_probs(init_probs)
+    hmm.add_transition_probs(tran_probs)
+    hmm.add_emission_probs(emit_probs)
+    vpath, vprob = hmm.viterbi()
+    hpstart = 0
+    while vpath[hpstart] < 1:
+        hpstart += 1
+    hpend = len(vpath)-1
+    while vpath[hpend] > 5:
+        hpend -= 1
+    return hpstart-trim, hpend+trim, vpath
