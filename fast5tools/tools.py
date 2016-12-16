@@ -1,3 +1,4 @@
+import numpy as np
 from collections import defaultdict
 
 ## for bardecoder
@@ -29,9 +30,12 @@ def reverse_seq(DNAstring):
     return DNAstring[-1::-1]
 
 def max_and_index(x):
-    i=x.argmax()
-    m=x[i]
-    return i,m
+    if x.size:
+        i=x.argmax()
+        m=x[i]
+        return i,m
+    else:
+        return np.array([]), np.array([])
 
 
 def update_table_dict(d,l,keys, length=None):
@@ -61,6 +65,17 @@ def read_table(fh, keys, types=None):
     return table
 
 
+def write_table(fh, keys, table):
+    '''fh is a file path to a tsv file. keys are column names (list).
+        lengths of types and keys = number colimns in table
+        both keys and types should appear in same order as columns
+        - Colums written in order of keys.'''
+    nlines = len(table[keys[0]])
+    with open(fh, 'w') as out:
+        for i in range(nlines):
+            l = [table[key][i] for key in keys]
+            line = ("\t").join([str(e) for e in l]) + "\n"
+            out.write(line)
 
 
 ## These assume columns that may be from older fast5s/workflows
@@ -99,5 +114,12 @@ def read_events_file(events_file, input_events=False):
     return read_table(events_file, keys, types)
 
 
-
-
+def write_events_file(fh, events, input_events=False):
+    '''fh is a file path to a tsv file.
+        keys are column names (list).
+        events is table (dict)'''
+    if input_events:
+        keys = ["mean", "std_dev",  "start", "length"]
+    else:
+        keys = ["mean", "std_dev",  "start", "length", "model_state", "model_level", "move", "p_model_state", "mp_state", "p_mp_state", "p_A", "p_C", "p_G", "p_T"]
+    write_table(fh, keys, events)     
