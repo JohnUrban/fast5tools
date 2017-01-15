@@ -91,7 +91,7 @@ def get_model(f5list, args, get_fxn):
     if args.readtype == "both":
         readtypes = ("template", "complement")
     else:
-        readtypes = (args.readtype)
+        readtypes = (args.readtype,)
     if len(f5list) == 1:
         for f5 in f5list:
             for rt in readtypes:

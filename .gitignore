@@ -1,6 +1,9 @@
 *.pyc
 *.egg-info
+*.eggs
 TODO
 deldir
 gen_fastx.sh
 gen_table.sh
+build/*
+dist/*
