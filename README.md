@@ -1,6 +1,10 @@
 # fast5tools
 Tools for working with fast5 files (nanopore data).
 
+
+Add the fast5tools dir to your PYTHONPATH.
+Add fast5tools/bin to your PATH
+
 Try:
 
 $ python setup.py test

@@ -19,7 +19,9 @@ Given path(s) to fast5 file(s) and/or directories of fast5s, return fasta, fastq
 For files that are corrupt or empty, for now it silently skips them.
 As an alternative, fast5stats will tell you all files skipped (in stderr or to specified file).
 
-John Urban (2015, 2016)
+John Urban (2015, 2016, 2017)
+
+TODO (11/17/2017): Allow customized name design with options for readtype, len, Q, channel, read num, asic, abspath, filename, etc
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 
@@ -45,7 +47,13 @@ It differs only in choosing between template and complement when a 2D is not pre
 Instead of choosing the longer one, it chooses the one with a higher quality mean quality score.''')
 
 parser.add_argument('-o', '--outtype', type=str, default="fasta",
-                    help = '''Choices: fasta, fastq, qual, intqual, details, falcon, oldfalcon, newfalcon.
+                    help = '''Choices: fasta, fastq, qual, intqual, details, falcon, oldfalcon, newfalcon, fasta_readstatsname, fastq_readstatsname, qual_readstatsname.
+Additional choices:
+Add _with_abspath to fasta/fastq/qual options (and readstatname versions) to add absolute f5 file path to read name.
+Add _with_filename to fasta/fastq/qual options (and readstatname versions) to add only the basename of each f5 file (excluding fast5 extension) to read name.
+If only want abs path in name, add _only_abspath to fasta/fastq/qual options (and readstatname versions).
+If only want basename of file in read name, add _only_filename to fasta/fastq/qualoptions (and readstatname versions).
+
 Default: fasta.
 If details, sequence not reported, but name, seqlen, and meanq are.
 falcon/oldfalcon/newfalcon output fasta files that are compatible with FALCON assembler.
@@ -85,7 +93,11 @@ args = parser.parse_args()
 #################################################
 ## deal with some of the arguments
 #################################################
-assert args.outtype in ("fasta", "fastq", "qual", "intqual", "details", "falcon", "oldfalcon", "newfalcon")
+legalouts = ("fasta", "fastq", "qual", "intqual", "details", "falcon", "oldfalcon", "newfalcon", "fasta_with_abspath", "fasta_only_abspath","fastq_with_abspath", "fastq_only_abspath", "qual_with_abspath", "qual_only_abspath", "fasta_with_filename", "fasta_only_filename","fastq_with_filename", "fastq_only_filename", "qual_with_filename", "qual_only_filename")
+legalouts += ("fasta_readstatsname", "fasta_readstatsname_with_abspath", "fasta_readstatsname_with_filename")
+legalouts += ("fastq_readstatsname", "fastq_readstatsname_with_abspath", "fastq_readstatsname_with_filename")
+legalouts += ("qual_readstatsname", "qual_readstatsname_with_abspath", "qual_readstatsname_with_filename")
+assert args.outtype in legalouts
 assert args.readtype[0] in "tc2maM"
 if args.readtype[0] == "t":
     args.readtype = "template"
@@ -156,6 +168,53 @@ def get_fast5tofastx_fxns(args):
         output = oldfalcon
     elif args.outtype == "newfalcon":
         output = newfalcon
+    elif args.outtype == "fasta_with_abspath":
+        output = fasta_with_abspath
+    elif args.outtype == "fasta_only_abspath":
+        output = fasta_only_abspath
+    elif args.outtype == "fastq_with_abspath":
+        output = fastq_with_abspath
+    elif args.outtype == "fastq_only_abspath":
+        output = fastq_only_abspath
+    elif args.outtype == "qual_with_abspath":
+        output = qual_with_abspath
+    elif args.outtype == "qual_only_abspath":
+        output = qual_only_abspath
+    #
+    elif args.outtype == "fasta_with_filename":
+        output = fasta_with_filename
+    elif args.outtype == "fasta_only_filename":
+        output = fasta_only_filename
+    elif args.outtype == "fastq_with_filename":
+        output = fastq_with_filename
+    elif args.outtype == "fastq_only_filename":
+        output = fastq_only_filename
+    elif args.outtype == "qual_with_filename":
+        output = qual_with_filename
+    elif args.outtype == "qual_only_filename":
+        output = qual_only_filename
+    #
+    elif args.outtype == "fasta_readstatsname":
+        output = fasta_readstatsname
+    elif args.outtype == "fasta_readstatsname_with_abspath":
+        output = fasta_readstatsname_with_abspath
+    elif args.outtype == "fasta_readstatsname_with_filename":
+        output = fasta_readstatsname_with_filename
+        
+    elif args.outtype == "fastq_readstatsname":
+        output = fastq_readstatsname
+    elif args.outtype == "fastq_readstatsname_with_abspath":
+        output = fastq_readstatsname_with_abspath
+    elif args.outtype == "fastq_readstatsname_with_filename":
+        output = fastq_readstatsname_with_filename
+        
+    elif args.outtype == "qual_readstatsname":
+        output = qual_readstatsname
+    elif args.outtype == "qual_readstatsname_with_abspath":
+        output = qual_readstatsname_with_abspath
+    elif args.outtype == "qual_readstatsname_with_filename":
+        output = qual_readstatsname_with_filename
+        
     ### get readtype fxn ###
     if args.readtype == "template":
         getread = get_template_read

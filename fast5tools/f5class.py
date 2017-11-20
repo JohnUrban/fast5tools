@@ -32,6 +32,7 @@ BASECALL_TEST2 = '/Analyses/Basecall_2D_000'
 
 GENERAL = "/Analyses/Basecall_2D_000/Configuration/general"
 GENERAL001 = "/Analyses/Basecall_1D_000/Configuration/general"
+GENERAL_R94_01 = "/Analyses/Basecall_1D_000/Configuration/basecall_1d"
 
 TRACKING_ID = "/UniqueGlobalKey/tracking_id"
 SPLIT_HAIRPIN = "/Analyses/Basecall_2D_000/Summary/split_hairpin/" #01
@@ -108,7 +109,7 @@ SAMPLE_RATE = "/Analyses/Basecall_2D_000/Configuration/general/sampling_rate" #0
 class Fast5(object):
     def __init__(self, filename):
         self.filename = filename
-        self.filebasename = (".").join(filename.split("/")[-1].split(".")[:-1])
+        self.filebasename = (".").join(filename.split("/")[-1].split(".")[:-1]) ## takes entire basename except ".fast5"
         self.abspath = os.path.abspath(filename)
         self.ATTR_2D = None
         self.ATTR_TEMP = None
@@ -116,6 +117,7 @@ class Fast5(object):
         self.SPLIT_HAIRPIN = None
         self.is_open = self.open() #self.f5 is the f5 file object
         if self.is_open:# and self.is_nonempty():
+            self.file_version = None
             self._basecalling_attempted = self.basecalling_attempted()
             self.LOC_TEMP = None
             self.LOC_COMP = None
@@ -168,6 +170,28 @@ class Fast5(object):
         """
         if self.is_open:
             self.f5.close()
+
+##    def get_file_version(self):
+##        return self.f5['/'].attrs['file_version']
+
+    def get_file_version(self):
+        if self.file_version is None:
+            try:
+                track_version = self.get_tracking_version()
+                self.file_version = float(self.f5.attrs['file_version'])
+                if float( track_version.split(".")[0] ) < 1 and self.file_version == float(1):
+                    ## this is  very early file, call it version 0
+                    self.file_version = 0.0
+                
+            except:
+                #If file_version cannot be found, call it 0.0
+                #This should not be the case as I see it in all files from 2014 to present
+                self.file_version = 0.0
+        return self.file_version
+
+    def get_tracking_version(self):
+        # This path exists in all file versions 2014 - Nov2017 so far
+        return self.f5['/UniqueGlobalKey/tracking_id/'].attrs['version']
             
     def basecalling_detected(self):
         return self._basecalling_attempted
@@ -260,6 +284,12 @@ class Fast5(object):
             pass
         try:
             self.GENERAL_PATH = GENERAL001
+            self.f5[self.GENERAL_PATH]
+            return True
+        except:
+            pass
+        try:
+            self.GENERAL_PATH = GENERAL_R94_01
             self.f5[self.GENERAL_PATH]
             return True
         except:
@@ -458,13 +488,39 @@ class Fast5(object):
     def get_num_skips(self, readtype):
         '''Assumes exists'''
         '''eventstpye in template, complement (no input)'''
-        return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_skips')
-
+        '''Note that in later file versions, num_skips is not provided'''
+        '''Need to compute num skips from num moves > 1'''
+        '''...'''
+        if self.get_file_version() < 0.6:
+            return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_skips')
+        else: #later versions requires compute of number of moves > 1
+            return sum(self.get_event_moves(readtype)>1)
 
     def get_num_stays(self, readtype):
         '''Assumes exists'''
         '''readtpye in template, complement (no input)'''
-        return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_stays')
+        '''Note that in later file versions, num_stays is not provided'''
+        '''Need to compute num stays from num moves == 0'''
+        if self.get_file_version() < 0.6:
+            return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_stays')
+        else:
+            return sum(self.get_event_moves(readtype) == 0)
+
+    def get_skip_prob(self, readtype):
+        '''Assumes exists'''
+        '''eventstpye in template, complement (no input)'''
+        return self._get_attr(path = self._get_attr_path(readtype), attr = 'skip_prob')        
+
+    def get_stay_prob(self, readtype):
+        '''Assumes exists'''
+        '''eventstpye in template, complement (no input)'''
+        return self._get_attr(path = self._get_attr_path(readtype), attr = 'stay_prob')        
+
+    def get_step_prob(self, readtype):
+        '''Assumes exists'''
+        '''eventstpye in template, complement (no input)'''
+        return self._get_attr(path = self._get_attr_path(readtype), attr = 'step_prob')        
+
 
     def get_time_stamp(self):
         try:
@@ -517,8 +573,6 @@ class Fast5(object):
         except:
             return "Basecaller Version not found."
 
-    def get_file_version(self):
-        return self.f5['/'].attrs['file_version']
 
     def get_file_number(self):
         return self.f5[self.GENERAL_PATH].attrs["file_number"]
@@ -530,16 +584,41 @@ class Fast5(object):
             return self.f5["/Analyses/EventDetection_000/Reads/"+ self.get_read_number()].attrs["read_id"]
 
     def get_read_number(self): ## June 22, 2016 -- not tested for all yet -- developing for non-basecalled files
-        return self.f5["/Analyses/EventDetection_000/Reads/"].keys()[0]
+        try:
+            return self.f5["/Analyses/EventDetection_000/Reads/"].keys()[0]
+        except:
+            pass
+        
+        try:
+            ## Nov 14, 2017 -- deal with R9.4 and R9.5
+            return str(self.f5['/Raw/Reads'].keys()[0])
+                #.split("_")[-1]
+        except:
+            pass
 
     def get_tag(self):
         return self.f5[self.GENERAL_PATH].attrs["tag"]
 
     def get_model_type(self):
         if self.basecalling_detected():
-            return self.f5[self.GENERAL_PATH].attrs['model_type']
+            if self.GENERAL_PATH.endswith('general'):
+                return self.f5[self.GENERAL_PATH].attrs['model_type']
+            elif self.GENERAL_PATH.endswith('basecall_1d'): ## basically a versioning problem that I can rewrite now that I track that
+                model = str(self.f5[self.GENERAL_PATH].attrs['template_model']) + "_" + str(self.f5[self.GENERAL_PATH].attrs['complement_model'])
+                return model
         else:
             return "NA"
+
+    def get_model_path(self):
+        if self.basecalling_detected():
+            model_path = str(self.f5[self.GENERAL_PATH].attrs['model_path'])
+            template =  str(self.f5[self.GENERAL_PATH].attrs['template_model'])
+            complement = ''
+            if self.has_complement:
+                complement =  str(self.f5[self.GENERAL_PATH].attrs['complement_model'])
+            return ("\t").join( [model_path, template, complement] )
+        else:
+            return "NA"    
 
 
     def get_basename(self):
@@ -557,18 +636,19 @@ class Fast5(object):
                 (self.given_name[readtype], self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]) = None, None, None, None
 
 
-    def _get_pore_info_name(self, readtype):
-        ## TODO -- this will store most read-pertinent info
-        if self.base_info_name == None:
-            self._get_base_info_name()
-        if self.info_name[readtype] == None:
-            info = []
-            info.append(readtype)
-            info.append("len:"+str(self.get_seq_len(readtype)))
-            info.append("Q:"+str(self.get_mean_qscore(readtype)))
-            self.info_name[readtype] = ("|").join(info)
-        return self.info_name[readtype] + "|" + self.base_info_name
+    def _get_info_name(self, readtype):
+        info = []
+        info.append(readtype)
+        info.append("len:"+str(self.get_seq_len(readtype)))
+        info.append("Q:"+str(self.get_mean_qscore(readtype)))
+        self.info_name[readtype] = ("|").join(info)
+
     
+    def get_info_name(self, readtype):
+        if self.info_name[readtype] == None:
+            self._get_info_name(readtype)
+        return self.info_name[readtype]
+
     def _get_base_info_name(self):
         info = []
         info.append("channel:"+self.get_channel_number())
@@ -585,24 +665,148 @@ class Fast5(object):
     def get_base_info_name(self):
         if self.base_info_name == None:
             self._get_base_info_name()
-        return self.base_info_name
+        return self.base_info_name       
+
+    def _get_pore_info_name(self, readtype):
+        ## TODO -- this will store most read-pertinent info
+##        if self.base_info_name == None:
+##            self._get_base_info_name()
+##        if self.info_name[readtype] == None:
+##            info = []
+##            info.append(readtype)
+##            info.append("len:"+str(self.get_seq_len(readtype)))
+##            info.append("Q:"+str(self.get_mean_qscore(readtype)))
+##            self.info_name[readtype] = ("|").join(info)
+##        return self.info_name[readtype] + "|" + self.base_info_name
+        return self.get_info_name(readtype) + "|" + self.get_base_info_name()
+
+    def get_pore_info_name(self, readtype):
+        ''' This is redundant with _get_pore_info_name() - wanted to transition to using this one w/o breaking things dependent on the other'''
+        return self.get_info_name(readtype) + "|" + self.get_base_info_name()
+
+    ## Nov 17 - I am adding other types of naming schemes, but I dont believe any of these need to be stored as I have been doing - they can just be created on the fly
+    def get_read_stats_name(self, readtype):
+        ''' Abridged version of pore_info_name: readtype:len:Q:channel:read. Missing asic:run:device:model.'''
+        info = []
+        info.append("channel:"+self.get_channel_number())
+        info.append((":").join(self.get_read_number().split("_")))
+        info.append( readtype+"_events:"+str(self.get_num_events(readtype)))
+        info.append( readtype+"_calledevents:"+str(self.get_num_called_events(readtype)))
+        info.append( readtype+"_skips:"+str(self.get_num_skips(readtype)))
+##        info.append( readtype+"_stays:"+str(self.get_num_stays(readtype)))
+        return self.get_info_name(readtype) + "|" + ("|").join(info)
+
+    def get_read_and_event_stats_name(self, readtype):
+        ## TODO: Nov 20 2017 -- making name good for mapping
+        ''' .'''
+        info = []
+        info.append("channel:"+self.get_channel_number())
+        info.append((":").join(self.get_read_number().split("_")))
+        ##ADDHERE
+        return self.get_info_name(readtype) + "|" + ("|").join(info)
+    
+    def get_pore_info_name_with_abspath(self, readtype):
+        return self.get_pore_info_name(readtype)+"|filename:"+self.abspath
+
+    def get_pore_info_name_with_filebasename(self, readtype):
+        return self.get_pore_info_name(readtype)+"|filename:"+self.filebasename
+
+    def get_read_stats_name_with_abspath(self, readtype):
+        return self.get_read_stats_name(readtype)+"|filename:"+self.abspath
+
+    def get_read_stats_name_with_filebasename(self, readtype):
+        return self.get_read_stats_name(readtype)+"|filename:"+self.filebasename
+    
+    def get_fastq(self, readtype, name=False):
+        #Nov 17 - transitioning to having this use any name given, pore_info by deault
+        # Thus all extra fastq fxns below can be replicated by providing the appropriate name here
+        # They will be kept as conveniences.
+        # This new approach will allow much much mor eflexibility in the future.
+        if not name:
+            name = self.get_pore_info_name(readtype)
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['@'+name, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+
+    def get_fastq_with_abspath(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['@'+self.get_pore_info_name_with_abspath(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+
+    def get_fastq_only_abspath(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['@'+self.abspath, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+    
+    def get_fastq_with_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['@'+self.get_pore_info_name_with_filebasename(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+
+    def get_fastq_only_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['@'+self.filebasename, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
 
     
-    def get_fastq(self, readtype):
+    def get_fasta(self, readtype, name=False):
+        #Nov 17 - transitioning to having this use any name given, pore_info by deault
+        if not name:
+            name = self.get_pore_info_name(readtype)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+self._get_pore_info_name(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+            return '\n'.join(['>'+name, self.seq[readtype]])
 
-    def get_fasta(self, readtype):
+    def get_fasta_with_abspath(self, readtype):
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self._get_pore_info_name(readtype), self.seq[readtype]])
+            return '\n'.join(['>'+self.get_pore_info_name_with_abspath(readtype), self.seq[readtype]])
 
-    def get_quals(self, readtype):
+    def get_fasta_only_abspath(self, readtype):
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self._get_pore_info_name(readtype), self.quals[readtype]])
+            return '\n'.join(['>'+self.abspath, self.seq[readtype]])
 
+    def get_fasta_with_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.get_pore_info_name_with_filebasename(readtype), self.seq[readtype]])
+
+    def get_fasta_only_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.filebasename, self.seq[readtype]])
+
+
+    def get_quals(self, readtype, name=False):
+        #Nov 17 - transitioning to having this use any name given, pore_info by deault
+        if not name:
+            name = self._get_pore_info_name(readtype)
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+name, self.quals[readtype]])
+
+    def get_quals_with_abspath(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.get_pore_info_name_with_abspath(readtype), self.quals[readtype]])
+
+    def get_quals_only_abspath(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.abspath, self.quals[readtype]])
+
+    def get_quals_with_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.get_pore_info_name_with_filebasename(readtype), self.quals[readtype]])
+
+    def get_quals_only_filename(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return '\n'.join(['>'+self.filebasename, self.quals[readtype]])
+
+    ## NOTE: did not add the abs path (or filename) options for thing below -- Add if needed.
     def get_quals_as_int(self, readtype):
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
@@ -701,6 +905,9 @@ class Fast5(object):
             return self.f5[self._get_location_path(readtype="input",dataset="Events")]["flags"]
         except:
             return None
+        
+    def get_event_moves(self, readtype):
+        return self.f5[self._get_location_path(readtype,"Events")]["move"]
 
     def get_events_dict(self, readtype):
         ## make it (store in external variables)
@@ -711,7 +918,11 @@ class Fast5(object):
         
 
     def get_model(self, readtype):
-        return self.f5[self._get_location_path(readtype,"Model")][()]
+        if self.get_file_version() < 0.6:
+            return self.f5[self._get_location_path(readtype,"Model")][()]
+        else:
+            msg = "Models_now_provided_with_Albacore.\tModels_used_locations:\t" + self.get_model_path() 
+            return [[e] for e in msg.split()]
 
     def get_model_string(self, readtype):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_model(readtype)])

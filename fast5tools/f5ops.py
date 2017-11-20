@@ -48,14 +48,94 @@ def get_all_reads(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
 #### e.g. used in get_single_read()
 #################################################
 
+
 def fastq(f5, readtype, *args, **kwargs):
     return f5.get_fastq(readtype)
+
+def fastq_with_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_fastq_with_abspath(readtype)
+
+def fastq_only_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_fastq_only_abspath(readtype)
+
+def fastq_with_filename(f5, readtype, *args, **kwargs):
+    return f5.get_fastq_with_filename(readtype)
+
+def fastq_only_filename(f5, readtype, *args, **kwargs):
+    return f5.get_fastq_only_filename(readtype)
+
+def fastq_readstatsname(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name(readtype)
+    return f5.get_fastq(readtype, name = name)
+
+def fastq_readstatsname_with_filename(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_filebasename(readtype)
+    return f5.get_fastq(readtype, name = name)
+
+def fastq_readstatsname_with_abspath(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_abspath(readtype)
+    return f5.get_fastq(readtype, name = name)
+
+
+
 
 def fasta(f5, readtype, *args, **kwargs):
     return f5.get_fasta(readtype)
 
+def fasta_with_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_fasta_with_abspath(readtype)
+
+def fasta_only_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_fasta_only_abspath(readtype)
+
+def fasta_with_filename(f5, readtype, *args, **kwargs):
+    return f5.get_fasta_with_filename(readtype)
+
+def fasta_only_filename(f5, readtype, *args, **kwargs):
+    return f5.get_fasta_only_filename(readtype)
+
+def fasta_readstatsname(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name(readtype)
+    return f5.get_fasta(readtype, name = name)
+
+def fasta_readstatsname_with_filename(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_filebasename(readtype)
+    return f5.get_fasta(readtype, name = name)
+
+def fasta_readstatsname_with_abspath(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_abspath(readtype)
+    return f5.get_fasta(readtype, name = name)
+
+
+
 def qual(f5, readtype, *args, **kwargs):
     return f5.get_quals(readtype)
+
+def qual_with_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_quals_with_abspath(readtype)
+
+def qual_only_abspath(f5, readtype, *args, **kwargs):
+    return f5.get_quals_only_abspath(readtype)
+
+def qual_with_filename(f5, readtype, *args, **kwargs):
+    return f5.get_quals_with_filename(readtype)
+
+def qual_only_filename(f5, readtype, *args, **kwargs):
+    return f5.get_quals_only_filename(readtype)
+
+
+def qual_readstatsname(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name(readtype)
+    return f5.get_quals(readtype, name = name)
+
+def qual_readstatsname_with_filename(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_filebasename(readtype)
+    return f5.get_quals(readtype, name = name)
+
+def qual_readstatsname_with_abspath(f5, readtype, *args, **kwargs):
+    name = f5.get_read_stats_name_with_abspath(readtype)
+    return f5.get_quals(readtype, name = name)
+
 
 def intqual(f5, readtype, *args, **kwargs):
     return f5.get_quals_as_int(readtype)
