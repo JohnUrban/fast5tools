@@ -5,7 +5,27 @@ import os
 #### e.g. used in:
 #### fast5tofastx.py, 
 #################################################
-
+def get_comments(request, f5, readtype):
+    if not request:
+        return False
+    elif request in ('base_info', 'pore_info', 'read_stats', 'event_stats', 'read_event_stats', 'abspath', 'filename'):
+        if request == 'base_info':
+            return f5.get_base_info_name()
+        elif request == 'pore_info':
+            return f5.get_pore_info_name(readtype)
+        elif request == 'read_stats':
+            return f5.get_read_stats_name(readtype)
+        elif request == 'event_stats':
+            return f5.get_event_stats_name(readtype)
+        elif request == 'read_event_stats':
+            return f5.get_read_and_event_stats_name(readtype)
+        elif request == 'abspath':
+            return f5.abspath
+        elif request == 'filename':
+            return f5.filebasename
+    else:
+        return request
+    
 def get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output, *args, **kwargs):
     ''' f5 is Fast5 object.
         readtype in template, complement, 2d, molecule, all.
@@ -15,6 +35,8 @@ def get_single_read(f5, readtype, minlen, maxlen, minq, maxq, output, *args, **k
     if f5.has_read(readtype):
         if f5.get_seq_len(readtype) >= minlen and f5.get_seq_len(readtype) <= maxlen:
             if f5.get_mean_qscore(readtype) >= minq and f5.get_mean_qscore(readtype) <= maxq:
+                if kwargs['comments']:
+                    kwargs['comments'] = get_comments(kwargs['comments'], f5, readtype)
                 return output(f5, readtype, *args, **kwargs)
 
 def get_template_read(f5, minlen, maxlen, minq, maxq, output, *args, **kwargs):
@@ -62,7 +84,7 @@ def fastq_with_filename(f5, readtype, *args, **kwargs):
     return f5.get_fastq_with_filename(readtype)
 
 def fastq_only_filename(f5, readtype, *args, **kwargs):
-    return f5.get_fastq_only_filename(readtype)
+    return f5.get_fastq_only_filename(readtype, comments=kwargs['comments'])
 
 def fastq_readstatsname(f5, readtype, *args, **kwargs):
     name = f5.get_read_stats_name(readtype)
@@ -140,12 +162,11 @@ def qual_readstatsname_with_abspath(f5, readtype, *args, **kwargs):
 def intqual(f5, readtype, *args, **kwargs):
     return f5.get_quals_as_int(readtype)
 
-def oldfalcon(f5, readtype, zmw_num, *args, **kwargs):
-    print readtype, zmw_num
-    return f5.get_falcon_fasta(readtype, zmw_num, "old")
+def oldfalcon(f5, readtype, *args, **kwargs):
+    return f5.get_falcon_fasta(readtype, zmw_num=kwargs['falcon_i'], style="old")
 
-def newfalcon(f5, readtype, zmw_num, *args, **kwargs):
-    return f5.get_falcon_fasta(readtype, zmw_num, "new")
+def newfalcon(f5, readtype, *args, **kwargs):
+    return f5.get_falcon_fasta(readtype, zmw_num=kwargs['falcon_i'], style="new")
 
 #######
 f5fxn = {}

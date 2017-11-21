@@ -85,6 +85,19 @@ The default method will therefore require >2*tarchive amount of disk space (i.e.
 The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
 Tarlite may become the default method after some testing if it performs at similar speeds.''')
 
+parser.add_argument('-c', '--comments', type=str, default=False, help='''Add comments to fastx names.
+Comments are separated from main name (following > or @) with a tab.
+Default: no comments/False.
+Leave any desired string here (you may need to enclode in quotes is there are spaces).
+Alternatively, specify one of the following options:
+base_info
+pore_info
+read_stats
+event_stats
+read_event_stats
+
+''')
+
 
 args = parser.parse_args()
 
@@ -232,6 +245,8 @@ def get_fast5tofastx_fxns(args):
 
 
 
+
+                
             
 #################################################
 #### EXECUTE @@@@@@@@@@@@
@@ -243,8 +258,10 @@ if __name__ == "__main__":
     falcon_i = 0
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
         if f5.is_not_corrupt() and f5.is_nonempty:
+            ## counter in case using falcon options
             falcon_i += 1
-            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output, falcon_i)
+            ## Process args.comments
+            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output, comments=args.comments, falcon_i=falcon_i)
             if read:
                 print read
 
