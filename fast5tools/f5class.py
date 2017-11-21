@@ -718,15 +718,14 @@ class Fast5(object):
         return self.get_info_name(readtype) + "|" + self.get_base_info_name()
 
     ## Nov 17 - I am adding other types of naming schemes, but I dont believe any of these need to be stored as I have been doing - they can just be created on the fly
-    def get_read_stats_name1(self, readtype):
+    def get_read_stats_name(self, readtype):
         ''' Abridged version of pore_info_name: readtype:len:Q:channel:read. Missing asic:run:device:model.'''
         info = []
         info.append("channel:"+self.get_channel_number())
         info.append((":").join(self.get_read_number().split("_")))
         return self.get_info_name(readtype) + "|" + ("|").join(info)
 
-##    def get_read_and_event_stats_name(self, readtype):
-    def get_read_stats_name(self, readtype):
+    def get_read_and_event_stats_name(self, readtype):
         ## TODO: Nov 20 2017 -- making name good for mapping
         ''' .'''
         info = []
@@ -746,8 +745,8 @@ class Fast5(object):
         info.append( readtype+"_start_time:"+str(self.get_start_time(readtype)))
         info.append( readtype+"time_length:"+str( sum(self.get_event_lengths(readtype)) ) )
 
-        info.append( 'raw:'+ str(self.get_raw_duration() ) )
-        return self.get_read_stats_name1(readtype) + "|" + ("|").join(info)
+        info.append( 'raw_duration:'+ str(self.get_raw_duration() ) )
+        return self.get_read_stats_name(readtype) + "|" + ("|").join(info)
     
     def get_pore_info_name_with_abspath(self, readtype):
         return self.get_pore_info_name(readtype)+"|filename:"+self.abspath
