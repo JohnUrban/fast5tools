@@ -140,6 +140,7 @@ class Fast5(object):
             self.GENERAL_PATH = None
             self._get_general_path()
 
+
     def __str__(self):
         return self.filename
     
@@ -491,20 +492,52 @@ class Fast5(object):
         '''Note that in later file versions, num_skips is not provided'''
         '''Need to compute num skips from num moves > 1'''
         '''...'''
-        if self.get_file_version() < 0.6:
-            return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_skips')
-        else: #later versions requires compute of number of moves > 1
-            return sum(self.get_event_moves(readtype)>1)
+        try:
+            return self.num_skips
+        except:
+            if self.get_file_version() < 0.6:
+                self.num_skips = self._get_attr(path = self._get_attr_path(readtype), attr = 'num_skips')
+            else: #later versions requires compute of number of moves > 1
+                self.num_skips = sum(self.get_event_moves(readtype)>1)
+        return self.num_skips
 
     def get_num_stays(self, readtype):
         '''Assumes exists'''
         '''readtpye in template, complement (no input)'''
         '''Note that in later file versions, num_stays is not provided'''
         '''Need to compute num stays from num moves == 0'''
-        if self.get_file_version() < 0.6:
-            return self._get_attr(path = self._get_attr_path(readtype), attr = 'num_stays')
-        else:
-            return sum(self.get_event_moves(readtype) == 0)
+        try:
+            return self.num_stays
+        except:
+            if self.get_file_version() < 0.6:
+                self.num_stays = self._get_attr(path = self._get_attr_path(readtype), attr = 'num_stays')
+            else:
+                self.num_stays = sum(self.get_event_moves(readtype) == 0)
+        return self.num_stays
+
+    def get_num_steps(self, readtype):
+        '''Assumes exists'''
+        '''readtpye in template, complement (no input)'''
+        '''As far as I know - both early and late do not have this.'''
+        '''Need to compute num steps from num moves == 1'''
+        try:
+            return self.num_steps
+        except:
+            self.num_steps = sum(self.get_event_moves(readtype) == 1)
+        return self.num_steps
+
+
+    def get_proportion_skips(self, readtype):
+        ''' Summing up num skips, steps, and stays gives number of called events. Therefore, num_called_events is the denominator.'''
+        return self.get_num_skips(readtype)/float(self.get_num_called_events(readtype))
+
+    def get_proportion_steps(self, readtype):
+        ''' Summing up num skips, steps, and stays gives number of called events. Therefore, num_called_events is the denominator.'''
+        return self.get_num_steps(readtype)/float(self.get_num_called_events(readtype))
+
+    def get_proportion_stays(self, readtype):
+        ''' Summing up num skips, steps, and stays gives number of called events. Therefore, num_called_events is the denominator.'''
+        return self.get_num_stays(readtype)/float(self.get_num_called_events(readtype))
 
     def get_skip_prob(self, readtype):
         '''Assumes exists'''
@@ -685,25 +718,36 @@ class Fast5(object):
         return self.get_info_name(readtype) + "|" + self.get_base_info_name()
 
     ## Nov 17 - I am adding other types of naming schemes, but I dont believe any of these need to be stored as I have been doing - they can just be created on the fly
-    def get_read_stats_name(self, readtype):
+    def get_read_stats_name1(self, readtype):
         ''' Abridged version of pore_info_name: readtype:len:Q:channel:read. Missing asic:run:device:model.'''
         info = []
         info.append("channel:"+self.get_channel_number())
         info.append((":").join(self.get_read_number().split("_")))
-        info.append( readtype+"_events:"+str(self.get_num_events(readtype)))
-        info.append( readtype+"_calledevents:"+str(self.get_num_called_events(readtype)))
-        info.append( readtype+"_skips:"+str(self.get_num_skips(readtype)))
-##        info.append( readtype+"_stays:"+str(self.get_num_stays(readtype)))
         return self.get_info_name(readtype) + "|" + ("|").join(info)
 
-    def get_read_and_event_stats_name(self, readtype):
+##    def get_read_and_event_stats_name(self, readtype):
+    def get_read_stats_name(self, readtype):
         ## TODO: Nov 20 2017 -- making name good for mapping
         ''' .'''
         info = []
-        info.append("channel:"+self.get_channel_number())
-        info.append((":").join(self.get_read_number().split("_")))
-        ##ADDHERE
-        return self.get_info_name(readtype) + "|" + ("|").join(info)
+##        info.append("channel:"+self.get_channel_number())
+##        info.append((":").join(self.get_read_number().split("_")))
+        info.append( readtype+"_events:"+str(self.get_num_events(readtype)))
+        info.append( readtype+"_calledevents:"+str(self.get_num_called_events(readtype)))
+        info.append( readtype+"_skips:"+str(self.get_num_skips(readtype)))
+        info.append( readtype+"_stays:"+str(self.get_num_stays(readtype)))
+        info.append( readtype+"_steps:"+str(self.get_num_steps(readtype)))
+        info.append( readtype+"_prop_skips:"+str(self.get_proportion_skips(readtype)))
+        info.append( readtype+"_prop_stays:"+str(self.get_proportion_stays(readtype)))
+        info.append( readtype+"_prop_steps:"+str(self.get_proportion_steps(readtype)))
+        info.append( readtype+"_skip_prob:"+str(self.get_skip_prob(readtype)))
+        info.append( readtype+"_stay_prob:"+str(self.get_stay_prob(readtype)))
+        info.append( readtype+"_step_prob:"+str(self.get_step_prob(readtype)))
+        info.append( readtype+"_start_time:"+str(self.get_start_time(readtype)))
+        info.append( readtype+"time_length:"+str( sum(self.get_event_lengths(readtype)) ) )
+
+        info.append( 'raw:'+ str(self.get_raw_duration() ) )
+        return self.get_read_stats_name1(readtype) + "|" + ("|").join(info)
     
     def get_pore_info_name_with_abspath(self, readtype):
         return self.get_pore_info_name(readtype)+"|filename:"+self.abspath
@@ -846,17 +890,40 @@ class Fast5(object):
     def get_start_time(self, which):
         ## which in experiment, input, template, complement
         if which == "experiment":
-            return self.f5["/UniqueGlobalKey/tracking_id"].attrs["exp_start_time"]
+            return self.get_experiment_start_time()
         elif which == "input":
+            return self.get_input_events_start_time()
+        elif self.has_read(which) and (which == "template" or which == "complement"):
+            return self.get_read_events_start_time(readtype=which,index=0)
+
+    def get_experiment_start_time(self):
+        return self.f5["/UniqueGlobalKey/tracking_id"].attrs["exp_start_time"]
+
+    def get_input_events_start_time(self):
+        ## Nov 2017: 'input' breaks this in latest files
+        if self.get_file_version() < 0.6:
             try:
                 return self.f5["/Analyses/EventDetection_000/Reads/Read_" + self.get_read_id()].attrs["start_time"]
             except:
                 return self.f5["/Analyses/EventDetection_000/Reads/" + self.get_read_number()].attrs["start_time"]
-        elif self.has_read(which) and (which == "template" or which == "complement"):
+        else:
+            ## TODO: better solution here...
+            print "Latest files have raw signal. Segmentation events only found after base-calling, and only for read types."
+            quit()
+##            return self.f5[self._get_location_path("input","Events")]["start"][0]
+
+    def get_read_events_start_time(self, readtype, index=0):
+        ''' By default this gives the START TIME -- i.e. time of first event'''
+        ''' To get end time, use -1.'''
+        ''' Any index between 0 and the vector length is accepted -- but not checked.'''
+        if index == 0 and self.get_file_version() < 0.6:
             return self.f5[self._get_location_path(which,"Events")].attrs["start_time"]
+        else:
+            return self.get_event_start_times(readtype)[index]
 
 
     def get_events(self, readtype):
+        ## Nov 2017: 'input' breaks this in latest files
         return self.f5[self._get_location_path(readtype,"Events")][()]
 
     def yield_events(self, readtype): ## 20160705 -- make tests
@@ -866,6 +933,7 @@ class Fast5(object):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_events(readtype)])
 
     def get_events_header(self, readtype): ## 20160611-inprogress, make tests
+        ## Nov 2017: 'input' breaks this in latest files
         return self.f5[self._get_location_path(readtype,"Events")].dtype.names
 
     def get_events_header_string(self, readtype): ## 20160611-inprogress, make tests
@@ -990,6 +1058,50 @@ class Fast5(object):
 
     def get_basecaller_events_limits(self):
         return self.get_basecaller_min_events(), self.get_basecaller_max_events()
+
+
+    def get_raw_path(self):
+        readnum = str(self.get_read_number())
+        RAW = '/Raw/Reads/' + readnum
+        return RAW
+
+    def get_raw_signal_path(self):
+        RAW = self.get_raw_path() + '/Signal/'
+        return RAW
+
+    def get_raw_signal(self):
+        return self.f5[self.get_raw_signal_path()][()]
+    
+    def get_raw_signal_string(self):
+        return ("\n").join([ str(e) for e in self.get_raw_signal()])
+
+
+    def get_raw_attribute(self, attr):
+        return self.f5[self.get_raw_path()].attrs[attr]
+    
+    def get_raw_duration(self):
+        return self.get_raw_attribute('duration')
+
+    def get_raw_median_before(self):
+        return self.get_raw_attribute('median_before')
+
+    def get_raw_read_id(self):
+        return self.get_raw_attribute('read_id')
+
+    def get_raw_read_number(self):
+        ## somewhat redundant with get_read_number -- but this one is not useful on older files
+        ## also output is slightly different "Read_Number" vs "Number"
+        return self.get_raw_attribute('read_number')
+
+    def get_raw_start_mux(self):
+        return self.get_raw_attribute('start_mux')
+
+    def get_raw_start_time(self):
+        return self.get_raw_attribute('start_time')
+
+    
+        
+        
 
 
 F5_TMP_DIR = ".fast5tools_tmp_dir"
