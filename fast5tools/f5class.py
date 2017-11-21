@@ -726,11 +726,8 @@ class Fast5(object):
         return self.get_info_name(readtype) + "|" + ("|").join(info)
 
     def get_read_and_event_stats_name(self, readtype):
-        ## TODO: Nov 20 2017 -- making name good for mapping
         ''' .'''
         info = []
-##        info.append("channel:"+self.get_channel_number())
-##        info.append((":").join(self.get_read_number().split("_")))
         info.append( readtype+"_events:"+str(self.get_num_events(readtype)))
         info.append( readtype+"_calledevents:"+str(self.get_num_called_events(readtype)))
         info.append( readtype+"_skips:"+str(self.get_num_skips(readtype)))
@@ -759,95 +756,84 @@ class Fast5(object):
 
     def get_read_stats_name_with_filebasename(self, readtype):
         return self.get_read_stats_name(readtype)+"|filename:"+self.filebasename
+
+    def _get_fastx_name_and_comments(self,name=False,comments=False):
+        if not name:
+            name = self.get_pore_info_name(readtype)
+        if not comments:
+            comments = ''
+        else:
+            comments = "\t" + comments
+        return name, comments
     
-    def get_fastq(self, readtype, name=False):
+    def get_fastq(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
         # Thus all extra fastq fxns below can be replicated by providing the appropriate name here
         # They will be kept as conveniences.
         # This new approach will allow much much mor eflexibility in the future.
-        if not name:
-            name = self.get_pore_info_name(readtype)
+        name, comments = self._get_fastx_name_and_comments(name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+name, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+            return '\n'.join(['@'+name+comments, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
 
     def get_fastq_with_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+self.get_pore_info_name_with_abspath(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+        name = self.get_pore_info_name_with_abspath(readtype)
+        return self.get_fastq(readtype, name)
 
     def get_fastq_only_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+self.abspath, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
+        return self.get_fastq(readtype, name=self.abspath)
     
     def get_fastq_with_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+self.get_pore_info_name_with_filebasename(readtype), self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
-
-    def get_fastq_only_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['@'+self.filebasename, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
-
+        name = self.get_pore_info_name_with_filebasename(readtype)
+        return self.get_fastq(readtype, name)
     
-    def get_fasta(self, readtype, name=False):
+    def get_fastq_only_filename(self, readtype):
+        return self.get_fastq(readtype, name=self.filebasename)
+    
+    def get_fasta(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
-        if not name:
-            name = self.get_pore_info_name(readtype)
+        name, comments = self._get_fastx_name_and_comments(name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+name, self.seq[readtype]])
+            return '\n'.join(['>'+name+comments, self.seq[readtype]])
 
     def get_fasta_with_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.get_pore_info_name_with_abspath(readtype), self.seq[readtype]])
+        name = self.get_pore_info_name_with_abspath(readtype)
+        return self.get_fasta(readtype, name)
 
     def get_fasta_only_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.abspath, self.seq[readtype]])
+        return self.get_fasta(readtype, name=self.abspath)
 
     def get_fasta_with_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.get_pore_info_name_with_filebasename(readtype), self.seq[readtype]])
+        name = self.get_pore_info_name_with_filebasename(readtype)
+        return self.get_fasta(readtype, name)
+
 
     def get_fasta_only_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.filebasename, self.seq[readtype]])
+        return self.get_fasta(readtype, name=self.filebasename)
 
 
     def get_quals(self, readtype, name=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
-        if not name:
-            name = self._get_pore_info_name(readtype)
+        name, comments = self._get_fastx_name_and_comments(name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+name, self.quals[readtype]])
+            return '\n'.join(['>'+name+comments, self.quals[readtype]])
 
     def get_quals_with_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.get_pore_info_name_with_abspath(readtype), self.quals[readtype]])
+        name = self.get_pore_info_name_with_abspath(readtype)
+        return self.get_quals(readtype, name)
 
     def get_quals_only_abspath(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.abspath, self.quals[readtype]])
+        return self.get_quals(readtype, name=self.abspath)
+
 
     def get_quals_with_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.get_pore_info_name_with_filebasename(readtype), self.quals[readtype]])
+        name = self.get_pore_info_name_with_filebasename(readtype)
+        return self.get_quals(readtype, name)
 
     def get_quals_only_filename(self, readtype):
-        if self.has_read(readtype):
-            self._parse_fastq_info(readtype)
-            return '\n'.join(['>'+self.filebasename, self.quals[readtype]])
+        return self.get_quals(readtype, name=self.filebasename)
 
     ## NOTE: did not add the abs path (or filename) options for thing below -- Add if needed.
     def get_quals_as_int(self, readtype):
