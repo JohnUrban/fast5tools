@@ -98,6 +98,10 @@ read_event_stats
 
 ''')
 
+parser.add_argument('-S', '--samflag', action='store_true', default=False, help='''Add sam flag to comments.
+
+''')
+
 
 args = parser.parse_args()
 
@@ -255,13 +259,17 @@ def get_fast5tofastx_fxns(args):
 if __name__ == "__main__":
     output, getread = get_fast5tofastx_fxns(args)
 
+    samflag=""
+    if args.samflag:
+        samflag = "F5:i:"
+
     falcon_i = 0
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
         if f5.is_not_corrupt() and f5.is_nonempty:
             ## counter in case using falcon options
             falcon_i += 1
             ## Process args.comments
-            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output, comments=args.comments, falcon_i=falcon_i)
+            read = getread(f5, args.minlen, args.maxlen, args.minq, args.maxq, output, comments=args.comments, falcon_i=falcon_i, samflag=samflag)
             if read:
                 print read
 
