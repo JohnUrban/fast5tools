@@ -1,4 +1,4 @@
-import os, sys, re
+import os, sys, re, pybedtools
 from collections import defaultdict
 
 class Sam(object):
@@ -269,7 +269,7 @@ class SamRecord(object):
         return self.get_pos_field() + self.get_reference_aln_len() - 1
 
 
-    def get_adjusted_pos_field(self, adjust_start=True):
+    def get_adjusted_pos_field(self, adjust_start=True, extra=0):
         '''If adjust_front is False, it adjusts end pos.'''
         if adjust_start:
             initialpos = self.get_pos_field()
@@ -288,7 +288,7 @@ class SamRecord(object):
                 clip += cigar_list[cigaridx1][0]
                 if cigar_list[cigaridx2][1] == 'S': #possible if H was first
                     clip += cigar_list[cigaridx2][0]
-        return initialpos + direction*clip  
+        return initialpos + direction*clip + direction*extra
 
     def get_clipping_adjusted_start(self):
         return self.get_adjusted_pos_field(cigaridx1=0, cigaridx2=1, direction=-1)
@@ -300,6 +300,16 @@ class SamRecord(object):
     def get_proportion_of_read_len(self, proportion=0.1):
         '''Returns int'''
         return int( self.get_read_len() * proportion )
+
+    def get_genomic_window_around_alignment(self, proportion=0.1):
+        '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
+        '''1-based, closed.'''
+        '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
+        extra = self.get_proportion_of_read_len(proportion)
+        start = self.get_adjusted_pos_field(cigaridx1=0, cigaridx2=1, direction=-1, extra=extra)
+        end = self.get_adjusted_pos_field(cigaridx1=-1, cigaridx2=-2, direction=1)
+        return start, end
+
 
 
 
@@ -403,7 +413,25 @@ class SplitReadSamRecord(object):
     def get_record(self,index):
         return self.records[index]
     
+    def genomic_window_ovlps(self):
+        ## Use pybedtools to find overlaps
+        pass
 
+    def get_genomic_window(self, proportion=0.1, merge_dist=0):
+        if self.get_num_aln() == 1:
+            return self.get_record(0).get_genomic_window_around_alignment(proportion)
+        elif self.get_num_aln() > 1:
+            chroms = []
+            genomic_windows = []
+            bedstr = ''
+            for i in range(self.get_num_aln):
+                chrom = self.get_record(i).get_rname_field()
+                chroms.append( chrom )
+                gw = self.get_record(i).get_genomic_window_around_alignment(proportion)
+                genomic_windows.append( gw )
+                bedstr = chrom + "\t" + str(gw[0]-1) + "\t" + str(gw[1])
+            bedtool = pybedtools.BedTool( bedstr, from_string=True )
+            merged = bedtool.merge(d=merge_dist)
 
 
 
