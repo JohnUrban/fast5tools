@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 import h5py, os, sys
 import cStringIO as StringIO
@@ -261,7 +261,7 @@ if __name__ == "__main__":
 
     samflag=""
     if args.samflag:
-        samflag = "F5:i:"
+        samflag = "F5:Z:"
 
     falcon_i = 0
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
