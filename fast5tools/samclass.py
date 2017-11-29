@@ -1,5 +1,6 @@
 import os, sys, re, pybedtools
 from collections import defaultdict
+import numpy as np
 
 class Sam(object):
     ''' Reproduce Same file with:
@@ -269,46 +270,84 @@ class SamRecord(object):
         return self.get_pos_field() + self.get_reference_aln_len() - 1
 
 
-    def get_adjusted_pos_field(self, adjust_start=True, extra=0):
-        '''If adjust_front is False, it adjusts end pos.'''
-        if adjust_start:
-            initialpos = self.get_pos_field()
-            cigaridx1=0
-            cigaridx2=1
-            direction=-1
-        else:
-            initialpos = self.get_reference_end_pos()
-            cigaridx1=-1
-            cigaridx2=-2
-            direction=1
-        clip = 0
+    def get_clipping_length(self, cigaridx1, cigaridx2, clip=0):
+        ''' Do not necessarily see use for this beyond 5' and 3' clip lengths - but left as a fxn to simplify'''
+        ''' 5' clip len: cigaridx1=0, cigaridx2=1'''
+        ''' 3' clip len: cigaridx1=-1, cigaridx2=-2'''
         if self.get_clipping_dist() > 0:
             cigar_list = self.get_cigar_list()
             if cigar_list[cigaridx1][1] in ('H', 'S'):
                 clip += cigar_list[cigaridx1][0]
                 if cigar_list[cigaridx2][1] == 'S': #possible if H was first
                     clip += cigar_list[cigaridx2][0]
+        return clip
+
+    def get_5prime_clip_len(self):
+        return self.get_clipping_length(cigaridx1=0, cigaridx2=1, clip=0)
+
+    def get_3prime_clip_len(self):
+        return self.get_clipping_length(cigaridx1=-1, cigaridx2=-2, clip=0)
+
+    def get_adjusted_pos(self, initialpos, clip=0, extra=0, direction=0):
+        '''This used to be a more involved function, but has been broken into smaller pieces that basically
+            render it as a simple arithmetic fxn.
+            initialpos is just some integer (typically the start POS or end POS of alignment
+            clip is just some integer (typically the 5' or 3' clipping len)
+            extra is just some integer (typically a fudge factor such as 10% of read length)
+            direction is just 1 or -1 (though can be used as a scale factor).
+                if direction=1, clip and extra will be added to initial pos
+                    (if abs(direction) > 1, then the scaled factor will be added)
+                if direction=-1, clip and extra will be subtracted from initial pos
+                    (if abs(direction) > 1, then the scaled factor will be subtracted)
+                if direction=0 (default), initialpos is returned as is
+            '''
         return initialpos + direction*clip + direction*extra
 
-    def get_clipping_adjusted_start(self):
-        return self.get_adjusted_pos_field(cigaridx1=0, cigaridx2=1, direction=-1)
+    def get_clipping_adjusted_start(self, extra=0):
+        ''' Adjusts start pos to be the number of HS-clipped bases 5' to reported POS'''
+        initialpos = self.get_pos_field()
+        clip = self.get_5prime_clip_len()
+        direction = -1
+        return self.get_adjusted_pos_field(initialpos, clip, extra, direction)
 
-    def get_clipping_adjusted_end(self):
-        return self.get_adjusted_pos_field(cigaridx1=-1, cigaridx2=-2, direction=1)
+    def get_clipping_adjusted_end(self, extra=0):
+        initialpos = self.get_reference_end_pos()
+        clip = self.get_3prime_clip_len()
+        direction = 1
+        return self.get_adjusted_pos(initialpos, clip, extra, direction)
         
 
     def get_proportion_of_read_len(self, proportion=0.1):
         '''Returns int'''
         return int( self.get_read_len() * proportion )
 
-    def get_genomic_window_around_alignment(self, proportion=0.1):
+    def get_genomic_window_around_alignment(self, flank=0, adjust_for_clipping=True, identifier=False):
         '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
+        ''' Default: W/o buffer/flanking sequence, it gives the clipping-adjusted guesses for start and end positions.'''
+        ''' Add buffer/flanks two ways:'''
+        '''     (1) int > 1 adds/subtracts that int.
+                (2) float [0,1] adds/subtracts that proportion of read length
+                    NOTE: 1.0 gives proportion while 1 gives 1 bp.'''
         '''1-based, closed.'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
-        extra = self.get_proportion_of_read_len(proportion)
-        start = self.get_adjusted_pos_field(cigaridx1=0, cigaridx2=1, direction=-1, extra=extra)
-        end = self.get_adjusted_pos_field(cigaridx1=-1, cigaridx2=-2, direction=1)
-        return start, end
+        assert flank >= 0 ## no negative numbers are meaningful here
+        if flank == 0:
+            extra = 0
+        elif flank > 1 or (flank == 1 and isinstance(flank, int)):
+            extra = int(flank) 
+        elif flank >= 0 and flank < 1 or (flank == 1 and isintance(flank, float)):
+            extra = int(self.get_proportion_of_read_len(proportion))
+        chrom = self.get_record(i).get_rname_field()
+        if adjust_for_clipping:
+            start = self.get_clipping_adjusted_start(extra=extra)
+            end = self.get_clipping_adjusted_end(extra=extra)
+        else:
+            start = self.get_pos_field() - extra
+            end = self.get_reference_end_pos() + extra
+        if identifier:
+            return (chrom, start, end, identifier)
+        else:
+            return (chrom, start, end)
 
 
 
@@ -393,6 +432,9 @@ class SamSplitAlnAggregator(Sam):
 
 
 
+
+
+
 class SplitReadSamRecord(object):
     '''Current objectives for this class:
         Obj1: Use [samrecords] to identify most likely genomic region a read came from.
@@ -417,21 +459,129 @@ class SplitReadSamRecord(object):
         ## Use pybedtools to find overlaps
         pass
 
-    def get_genomic_window(self, proportion=0.1, merge_dist=0):
+
+    def ovlp(a,b,d=0):
+        ''' a and b are 3-tuples of (chr,start,end)'''
+        ''' assumes sorted such that, if ovlp, a is before b along number line.'''
+        ''' d is distance - allows a gap up to d between intervals to still be an overlap - default 0'''
+	if a[0] == b[0] and a[1] <= b[1] and b[1] <= a[2]:
+            return True
+	return False
+
+    def merge(l,d=0):
+        ''' Takes in list of 3-tuples of (chr.start,end)'''
+        ''' Returns updated list where overlapping intervals are merged'''
+        ''' d is distance - allows a gap up to d between intervals to still be an overlap - default 0'''
+        a = l[0]
+        update = []
+        for i in range(1,len(l)):
+            b = l[i]
+            if self.ovlp(a,b,d):
+                a = merge_tuples(a,b) ### new merge_tuples is identifier-aware; old = (a[0],a[1],b[2])
+            else:
+                update.append(a)
+                a = b
+        ## at end, if last thng ovlpd, then it merged interval in the making (a) needs to added to 'update'
+        ##         if last thing didn't ovlp, then final interval, named 'a' before exiting, needs to be added to 'update'
+        update.append(a)
+        return update
+
+    def merge_tuples(a,b):
+        if len(a) == 3:
+            return (a[0],a[1],b[2])
+        elif len(a) == 4: ##has identifier
+            identifier = str(a[3]) + "," + str(b[3])
+            return (a[0], a[1], b[2], identifier)
+
+
+    def determine_window_length(self, genomic_window):
+        ''' Meant to take in single genomic_window tuple and report length back'''
+        return genomic_window[2] - genomic_window[1] + 1
+
+    def determine_window_lengths(self, genomic_windows):
+        ''' Meant to take in list of genomic_window tuples, and return list with window lengths.'''
+        return np.array([self.determine_window_length( gw ) for gw in genomic_windows])
+
+    def determine_longest_window(self, genomic_windows):
+        ''' Meant to take list of genomic_window tuples and report the indexes of longest window(s) in list.
+        More than one index is returned only when there is a tie.'''
+        a = self.determine_window_lengths(genomic_windows)
+        return np.array(range(len(a)))[a == a.max()]
+
+    def determine_window_proportions(self, genomic_windows):
+        a = self.determine_window_lengths(genomic_windows)
+        return a.astype(np.float)/sum(a)
+
+    def determine_majority_window(self, genomic_windows, majority=0.7):
+        ''' Meant to look at list of genomic_window tuples and report whether one window
+            makes up the majority percentage of the total window length. (reports index)
+            This does not mean the largest proportion (which would be same index as longest window).
+            This needs the max window to be larger than a given cutoff.
+            Majority is not simply 51% - it should be some number that makes sense.
+            Default majority uis 0.7 -- saying I'd like at least 70% of the total genomic window to be encompassed by one.
+            ...So long as majority >0.5, there should be only one gw index returned.
+            ...Nonetheless, it is coded anticipating other uses that may allow more than one window index returned.'''
+        gw_props = self.determine_window_proportions(genomic_windows)
+        gw_max = gw.props.max()
+        if gw_max >= majority:
+            return np.array(range(len(gw_props)))[gw_props == gw_max]
+        else:
+            return None
+                
+
+    def get_genomic_window(self, flank=0.1, merge_dist=0):
+        '''Returns 3-tuple'''
+        '''flank = as in get_genomic_window_around_alignment() described below'''
+        ''' merge_dist = d from self.merge(): allows a gap up to d between intervals to still be an overlap - default 0'''
+        ''' From the individual get_genomic_window_around_alignment():'''
+        '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
+        ''' Default: W/o buffer/flanking sequence, it gives the clipping-adjusted guesses for start and end positions.'''
+        ''' Add buffer/flanks two ways:'''
+        '''     (1) int > 1 adds/subtracts that int.
+                (2) float [0,1] adds/subtracts that proportion of read length
+                    NOTE: 1.0 gives proportion while 1 gives 1 bp.'''
+        '''1-based, closed.'''
+        '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
         if self.get_num_aln() == 1:
-            return self.get_record(0).get_genomic_window_around_alignment(proportion)
+            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=False)
         elif self.get_num_aln() > 1:
-            chroms = []
             genomic_windows = []
             bedstr = ''
             for i in range(self.get_num_aln):
-                chrom = self.get_record(i).get_rname_field()
-                chroms.append( chrom )
-                gw = self.get_record(i).get_genomic_window_around_alignment(proportion)
+                gw = self.get_record(i).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=i) 
                 genomic_windows.append( gw )
-                bedstr = chrom + "\t" + str(gw[0]-1) + "\t" + str(gw[1])
-            bedtool = pybedtools.BedTool( bedstr, from_string=True )
-            merged = bedtool.merge(d=merge_dist)
+##                bedstr = chrom + "\t" + str(gw[0]-1) + "\t" + str(gw[1])
+            #bedtools approach
+##            bedtool = pybedtools.BedTool( bedstr, from_string=True )
+##            merged = bedtool.merge(d=merge_dist)
+            #python-only approach
+            genomic_windows.sort()
+            gw_merge = self.merge(l=gw, d=merge_dist)
+            num_merge = len(gw_merge)
+            if num_merge == 1:
+                #return the composite genomic window formed by overlapping genomic windows
+                return gw_merge[0]
+            elif num_merge > 1:
+                # find majority
+                # if num_merge == self.get_num_aln(): then can use SamRecord objects for more info about majority alignment
+                # else: some merges occurred -- can find majority based on aln len -- can also dig into SamRecords if nec
+                # can look first to see if all merges are on the same chr -- then look at start of elemnt1 and end of the last element
+                #   to determine total length/genomic window.... if it is "reasonable", just give the entire window...
+                #       "reasonable" might be 2X read length or something...
+                #       a problem with using the bp readlen is that the base-caller might seriously shorten the reads when it is dealing with lots of analog...
+                #       could do 10x readlen or min(X, 10xreadlen) .... but X needs to be > readlen + fudgefactor...
+                #       could also make it proportional to the number of events or number of raw data points...
+                ####
+                #### Note b/c the genomic windows were extended to at least the length of reads by adjusting for clipping,
+                ####    they should not be used as is for determining the majority alignment
+                if num_merge == self.get_num_aln():
+                    ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
+                    pass #define majority trough gen_aln lens as well as mapquality...?
+                else:
+                    # there was some merging, meaning there is a site in the genome with more than one alignment within reasonable distance (in above conditions)
+                    # work on GWs instead of
+            
+            
 
 
 
