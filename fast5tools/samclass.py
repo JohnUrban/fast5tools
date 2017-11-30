@@ -127,7 +127,7 @@ class SamRecord(object):
     def parse_alignment(self):
         aln = self.alignment.strip().split('\t')
         self.parsed_aln['QNAME'] = aln[0]
-        self.parsed_aln['FLAG'] = aln[1]
+        self.parsed_aln['FLAG'] = int(aln[1])
         self.parsed_aln['RNAME'] = aln[2]
         self.parsed_aln['POS'] = int(aln[3])
         self.parsed_aln['MAPQ'] = int(aln[4])
@@ -394,11 +394,12 @@ class SamRecord(object):
     def get_genomic_window_around_alignment(self, flank=0, adjust_for_clipping=True, identifier=False):
         '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
         ''' Default: W/o buffer/flanking sequence, it gives the clipping-adjusted guesses for start and end positions.'''
-        ''' Add buffer/flanks two ways:'''
+        ''' Add buffer/flank lengths to each side in two ways:'''
         '''     (1) int > 1 adds/subtracts that int.
                 (2) float [0,1] adds/subtracts that proportion of read length
                     NOTE: 1.0 gives proportion while 1 gives 1 bp.'''
         '''1-based, closed.'''
+        ''' turn adjust_for_clipping off to get genomic window around aligned portion only -- if off and flank=0, just gives aligned portion (MD=x)'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
         assert flank >= 0 ## no negative numbers are meaningful here
         if flank == 0:
@@ -420,7 +421,18 @@ class SamRecord(object):
             return (chrom, start, end)
 
 
+    def reference_strand(self):
+        # With help understanding the bitwise flags from: http://blog.nextgenetics.net/?e=18
+        if self.get_flag_field() & 16:
+            return -1
+        else:
+            return 1
 
+    def on_positive_strand(self):
+        return self.reference_strand() > 0
+
+    def on_negative_strand(self):
+        return self.reference_strand() < 0
 
 
 
@@ -514,13 +526,39 @@ class SplitReadSamRecord(object):
             - pct identity of longest aln
     '''
     def __init__(self, samrecords):
+        ''' samrecords is a list of SAM records describing one source read.
+            This list is typically made by parsing a sorted-by-readname SAM file with SamSplitAlnAggregator() class.'''
         self.records = samrecords
         self.num_aln = None
 
     def get_num_aln(self):
+        ''' This is more accurately "number of sam records".
+            However, I left it as is, since the functions that use it will
+            typically be using it when 1+ sam records is an alignment.
+            This will report unaligned SAM records as 1 alignment.... so be careful to use with "has_alignments()"'''
         if self.num_aln is None:
             self.num_aln = len(self.records)
         return self.num_aln
+
+    def has_alignments(self):
+        ''' Looks for at least one record with an alignment.'''
+        for i in range(self.get_num_aln()):
+            if self.get_record(i).is_aligned():
+                return True
+        return False
+
+    def has_only_records_that_are_aligned(self):
+        ''' This ensures all SAM records are for alignments - not unaligned reads.
+            This is essentially redundant with has_alignments() since it appears the possibilities for a SAM record are:
+                1. unaligned read
+                2. aligned read - only alignment
+                3. aligned read - 1 of N alignments'''
+        count = 0
+        for i in range(self.get_num_aln()):
+            if self.get_record(i).is_aligned():
+                count+=1
+        return self.get_num_aln() == count
+
 
     def get_record(self,index):
         return self.records[index]
@@ -529,6 +567,41 @@ class SplitReadSamRecord(object):
         ## Use pybedtools to find overlaps
         pass
 
+
+    def determine_longest_alignment(self):
+        if self.has_alignments():
+            maxalnlen = 0
+            for i in range(self.get_num_aln()):
+                if self.get_reference_aln_len() > maxalnlen:
+                    maxalnlen = self.get_reference_aln_len()
+                    maxalnidx = i
+            return (maxalnlen, maxalnidx)
+        else:
+            return None
+
+    def determine_highest_alignment_score(self):
+        if self.has_alignments():
+            maxalnscore = float('-inf')
+            for i in range(self.get_num_aln()):
+                if self.get_AS_field() > maxalnscore:
+                    maxalnscore = self.get_AS_field() 
+                    maxalnidx = i
+            return (maxalnscore, maxalnidx)
+        else:
+            return None
+
+    def determine_highest_alignment_score_ratio(self):
+        ''' How much bigger is highest AS than next biggest AS?'''
+        if self.has_alignments():
+            maxalnscore = float('-inf')
+            secondplace = float('-inf')
+            for i in range(self.get_num_aln()):
+                if self.get_AS_field() > maxalnscore:
+                    secondplace = maxalnscore
+                    maxalnscore = self.get_AS_field() 
+            return float(maxalnscore)/secondplace
+        else:
+            return None
 
     def ovlp(a,b,d=0):
         ''' a and b are 3-tuples of (chr,start,end)'''
@@ -588,7 +661,7 @@ class SplitReadSamRecord(object):
             scale_factor = sum(a)
         return a.astype(np.float)/scale_factor
 
-    def determine_majority_window(self, genomic_windows, majority=0.5, scale_factor=False):
+    def determine_majority_window(self, genomic_windows, majority=0.5, scale_factor=False, proportions_provided=False):
         ''' Meant to look at list of genomic_window tuples and report whether one window
             makes up the majority percentage of the summed length of all windows. (reports index)
             This does not mean the largest proportion (which would be same index as longest window).
@@ -598,7 +671,9 @@ class SplitReadSamRecord(object):
             ...So long as majority >0.5, there should be only one gw index returned.
             ...Nonetheless, it is coded anticipating other uses that may allow more than one window index returned.
             If a single window = 0.5 and there are >2 windows, then it is majority...'''
-        gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
+        gw_props = genomic_windows
+        if not proportions_provided: #default is that proportions are obtained herein, but it makes more sense for some use cases to create/store the proportions array for other purposes in which case it can be provided.
+            gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
         gw_max = gw.props.max()
         if gw_max >= majority:
             return np.array(range(len(gw_props)))[gw_props == gw_max]
@@ -606,10 +681,13 @@ class SplitReadSamRecord(object):
             return False
 
 
-    def determine_longest_window_ratio(self, genomic_windows):
+    def determine_longest_window_ratio(self, genomic_windows, proportions_provided=False):
         ''' Meant to look at list of genomic_window tuples and report whether the ratio between
-            the longest and second longest window.'''
-        gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
+            the longest and second longest window.
+            Don't need proportions here.... same answer when not scaled to sum... but I wanted the np.array'''
+        gw_props = genomic_windows
+        if not proportions_provided: #default is that proportions are obtained herein, but it makes more sense for some use cases to create/store the proportions array for other purposes in which case it can be provided.
+            gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
         if len(gw_props) == 1:
             return float('inf')
         else:
@@ -618,10 +696,11 @@ class SplitReadSamRecord(object):
             return gw_props[0] / float(gw_props[1])
 
     def alignments_ordered_like_read(self, indexes=[]):
-        ''' indexes = list of indexes of the records you'd like to check.
+        ''' ASSUMES all are on the same chrom... though violating this will likely return False
+                In future: can have it ensure that the records actually occur on same chrom (just to be safe)...
+            indexes = list of indexes of the records you'd like to check.
                 e.g. you might have 3 split alignments but only want to check 2 and 3.
-            This will ensure that the records actually occur on same chrom (just to be safe),
-                then checks to see if the 5' clipping in reads agrees with POS field ordering.
+            Checks to see if the 5' clipping in reads agrees with POS field ordering.
             BWA gives partitioned split alignments. So if 3 split alignments occur consecutively along
             a genomic region, then their 5' clipping lengths should each be longer than the last.'''
         if not indexes:
@@ -633,6 +712,56 @@ class SplitReadSamRecord(object):
         df = pandas.DataFrame(d)
         ans = df.sort('pos')['pos'] == c.sort('clip')['pos']
         return sum(ans) == len(indexes)
+
+
+
+    def strands_of_alignments(self, indexes=[]):
+        if not indexes:
+            indexes = range(self.get_num_aln())
+        strands = np.zeros(len(indexes))
+        for i in indexes:
+            strands[i] = self.get_record(i).reference_strand() 
+        return strands
+    def alignments_on_same_strand(self, indexes=[]):
+        ''' ASSUMES all are on the same chrom... though violating this will likely return False
+                In future: can have it ensure that the records actually occur on same chrom (just to be safe)...
+            indexes = list of indexes of the records you'd like to check.
+                e.g. you might have 3 split alignments but only want to check 2 and 3.
+            Checks to see if the 5' clipping in reads agrees with POS field ordering.
+            BWA gives partitioned split alignments. So if 3 split alignments occur consecutively along
+            a genomic region, then their 5' clipping lengths should each be longer than the last.'''
+        strands = self.strands_of_alignments(indexes)
+        positive = sum(strands == 1)
+        negative = sum(strands == -1)
+        allsame = (positive == 0 and negative == len(indexes)) or (negative == 0 and positive == len(indexes))
+        return allsame, positive, negative
+
+    def get_spanning_alignment_coordinates(self, indexes=[]):
+        ''' Given list of indexes specifying a (sub)set of SAM records,
+            return (1-based, closed) 3-tuple of:
+                (chrom, 5'-most start position, 3'-most end position).
+            This constitutes the reference stretch spanned by these alignments.
+            If all records do not share the same RNAME field, None is returned.
+            In context of alignments captured in a genomic window similar to the read length (+/-)
+                that are shown to be ordered along the read correctly and the alignments are on the same strand,
+                it is plausible (though not guaranteed) that the DNA molecule that gave rise to the read
+                spanned at least this stretch of the reference --- with segments of bad base-calling splitting up the alignment.
+                NOTE: spurious alignments can add noise to the order and strand info so be careful in rejecting real things...'''
+        if not indexes:
+            indexes = range(self.get_num_aln())
+        d = {'start':[], 'end':[]}
+        # initialize
+        d['start'].append( self.get_record(0).get_pos_field() )
+        d['end'].append( self.get_record(0).get_reference_end_pos() )
+        chrom = self.get_record(0).get_rname_field()
+        for i in indexes[1:]:
+            if self.get_record(i).get_rname_field() != chrom:
+                return None
+            d['start'].append( self.get_record(i).get_pos_field() )
+            d['end'].append( self.get_record(i).get_reference_end_pos() )
+        start = sorted(d['start'])[0]
+        end = sorted(d['end'])[-1]
+        return (chrom, start, end)
         
                 
 
@@ -649,7 +778,9 @@ class SplitReadSamRecord(object):
                     NOTE: 1.0 gives proportion while 1 gives 1 bp.'''
         '''1-based, closed.'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
-        if self.get_num_aln() == 1:
+        if not self.has_alignments():
+            return None ## No alignments, therefore no genomic window.
+        elif self.get_num_aln() == 1: ## although get_num_aln() will report 1 for unaligned SAM records, those are taken care of above.
             return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier="single_alignment")
         elif self.get_num_aln() > 1:
             genomic_windows = []
@@ -688,29 +819,44 @@ class SplitReadSamRecord(object):
                 ####        Moreover - since these reads can be highly error prone (w/ normal bases), 50% of read might not map to 50% of alignment
                 ####                -  and w/ the analogs... read length might be really off... only would want to trust aligned regions...
                 ####    Best might be as a % of total alignment length MD=X.
+                split_alignments = []
+                for i in range(self.get_num_aln):
+                    ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
+                    split_alignments.append( ref_coords )
+                split_alignment_proportions = self.determine_window_proportions(split_alignments)
+                split_alignment_majority = self.determine_majority_window(split_alignment_proportions, majority, proportions_provided=True)
+                if split_alignment_majority:
+                    chosen_alignment_index = split_alignment_majority[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
+                else:
+                    chosen_alignment_index = self.determine_longest_window()
+                AS = self.get_record(chosen_alignment_index).get_AS_field()    
+                split_alignment_top2_ratio = self.determine_longest_window_ratio(split_alignment_proportions, proportions_provided=True)
+                split_alignment_highest_AS = self.determine_highest_alignment_score()[0]
+                split_alignment_top2_AS_ratio = self.determine_highest_alignment_score_ratio()
+                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
+                chosen_alignment = genomic_windows[chosen_alignment_index]
+                longest = self.determine_window_lengths()[chosen_alignment_index]
                 if num_after_merge == self.get_num_aln():
                     ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
                     ## is there a majority? Aln that makes up > X% of summed alignment length?
-                    genomic_alignments = []
-                    for i in range(self.get_num_aln):
-                        ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
-                        genomic_alignments.append( ref_coords )
-                    majority = self.determine_majority_window(genomic_alignments, majority)
-                    if majority:
+                   if split_alignment_majority:
                         ## need to get genomic window around alignment for majority alignment
                         ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
-                        majority_alignment = genomic_windows[majority]
-                        identifier = 'majority_alignment:' #+ proportion_aligned_bases + proportion_estimated_alignment_len + num_alignments + 2nfbest...
-                        majority_window = (majority_alignment[0], majority_alignment[1], majority_alignment[2], identifier)
-                        return majority_window
+
+                        identifier = 'majority_alignment|' +  split_alignment_label
                     else:
-                        ## return longest? return multiple? use alignment scores?
-                        identifier = 'longest_alignment:' ## plus info....
-                        pass
+                        ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
+                        identifier = 'longest_alignment:' + split_alignment_label
+                    chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
+                    return chosen_alignment_genomic_window
                 else: # compare merged and single alns all at same time?
-##                    if_majority here
-##                    if_merged_majority
-##                    longest_btwn_merged_and_single
+                    #is there a merge that exceeds the max align length?
+                    #   gather information:
+                    #     does that merge contain alignments in same order as found along read?
+                    #     are the alignments inside merge from the same strand?
+                    #     is the sum of the alignments in that span also longer than longest single aln?
+                    #     is the sum of the aln scores higher than the single aln score?
+                    
 
                     pass
                     # there was some merging, meaning there is a site in the genome with more than one alignment within reasonable distance (in above conditions)
@@ -740,19 +886,19 @@ class SplitReadSamRecord(object):
 
 #Functions on SAM line
 def sam_seq_len(x):
-    ''' Length of SEQ (part of READ that is soft-clipped and/or aligned) as defined by SAM specifications.'''
+    ''' Length of SEQ (part of READ that is soft-clipped and/or aligned) as defined by SAM specifications. x = cigar string.'''
     return sum([int(e) for e in re.findall('(\d+)[MIS=X]', x)])
 
 def sam_read_len(x):
-    ''' Length of entire READ as defined by SAM specifications.'''
+    ''' Length of entire READ as defined by SAM specifications. x = cigar string.'''
     return sum([int(e) for e in re.findall('(\d+)[HMIS=X]', x)])
 
 def sam_alnseq_len(x):
-    ''' Length of READ that is aligned only (no soft clipping) as defined by SAM specifications.'''
+    ''' Length of READ that is aligned only (no soft clipping) as defined by SAM specifications. x = cigar string.'''
     return sum([int(e) for e in re.findall('(\d+)[MI=X]', x)])
 
 def sam_refalnseq_len(x):
-    '''Length of REFERENCE sequence underlying the aligned portion of read.'''
+    '''Length of REFERENCE sequence underlying the aligned portion of read. x = cigar string.'''
     return sum([int(e) for e in re.findall('(\d+)[MD=X]', x)])
 
 #### STUFF TO WORK IN TO MAYBE THE SAM CLASS
