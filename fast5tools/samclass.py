@@ -1,4 +1,4 @@
-import os, sys, re, pybedtools
+import os, sys, re, pybedtools, pandas
 from collections import defaultdict
 import numpy as np
 
@@ -139,6 +139,16 @@ class SamRecord(object):
         self.parsed_aln['QUAL'] = aln[10]
         self.parsed_aln['EXTRA'] = ('\t').join( aln[11:] )
 
+    def is_aligned(self):
+        ## TODO - better definition?
+        ''' This definition is useful for single-end/long reads - but not for PE reads.'''
+        return self.get_rname_field() != '*'
+
+    def is_unaligned(self):
+        ## TODO - better definition?
+        ''' This definition is useful for single-end/long reads - but not for PE reads.'''
+        return self.get_rname_field() == '*'
+
 
     def get_sam_fields(self):
         return ['QNAME', 'FLAG', 'RNAME', 'POS', 'MAPQ', 'CIGAR', 'RNEXT', 'PNEXT', 'TLEN', 'SEQ', 'QUAL', 'EXTRA']
@@ -209,36 +219,65 @@ class SamRecord(object):
             self.read_len = sum([self.cigar[e] for e in 'HMIS=X']) 
         return self.read_len
 
+    def get_SEQ_len_without_clipped_regions(self):
+        ''' Length of actually aligned portion.'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return sum([self.cigar[e] for e in 'MI=X']) 
 
-    def update_pos_field(self, add=0, replace=None):
+
+    def update_pos_field(self, add=0, replace=None): ## example use: doubled ecoli genome for mapping over breakpoint; now want to subtract G_size from anything greater than G_size to put back on first copy
         assert add == 0 or replace is None
         if add != 0:
             self.parsed_aln['POS'] += add
         elif replace is not None:
             self.parsed_aln['POS'] = replace
 
-    def find_given_extra_field(self, regex):
+
+    def find_given_extra_field(self, regex, output_type=None):
         '''Returns only first match. There should only be one match.'''
         for e in self.parsed_aln['EXTRA'].split('\t'):
             found = re.search(regex, e)
             if found is not None:
                 break
-        return found.group(1)
+        try:
+            if output_type is None:
+                return found.group(1)
+            else:
+                return output_type(found.group(1))
+        except:
+            return None
+            
 
 
     def get_edit_dist_field(self):
         '''Assumes NM:i: field is present for now...'''
-        if self.edit_dist is None: 
-            self.edit_dist = int(self.find_given_extra_field(regex='NM:i:(\d+)'))
+        if self.edit_dist is None:
+            self.edit_dist = self.find_given_extra_field(regex='NM:i:(\d+)', output_type=int)
         return self.edit_dist
 
 
     def get_fast5_field(self):
         '''Only works with SAM files that have the F5:Z: tag from fast5tools'''
         if self.fast5info is None: 
-            self.fast5info = self.find_given_extra_field(regex='F5:Z:(.*)')
+            self.fast5info = self.find_given_extra_field(regex='F5:Z:(.*)', output_type=str)
         return self.fast5info
             
+    def get_AS_field(self):
+        '''Assumes AS:i: field is present for now...'''
+        return self.find_given_extra_field(regex='AS:i:(.*)', output_type=int)
+
+    def get_XS_field(self):
+        '''Assumes XS:i: field is present for now...'''
+        return self.find_given_extra_field(regex='XS:i:(.*)', output_type=int)
+
+    def get_MD_field(self):
+        '''Assumes NM:i: field is present for now...'''
+        return self.find_given_extra_field(regex='MD:Z:(.*)', output_type=str)
+
+    def get_XA_field(self):
+        '''Assumes NM:i: field is present for now...'''
+        return self.find_given_extra_field(regex='XA:Z:(.*)', output_type=str)
 
 
     def get_clipping_dist(self):
@@ -252,16 +291,19 @@ class SamRecord(object):
     def get_cigar_list(self):
         return [(int(count),char) for count,char in re.findall('(\d+)([MIDNSHP=X])', self.get_cigar_field())]
 
-    def convert_cigar_element_
+##    def convert_cigar_element_
 
     def get_edit_dist_with_clipping(self):
-        return int(self.get_edit_dist_field()) + int(self.get_clipping_dist())
+        if self.is_aligned():
+            return int(self.get_edit_dist_field()) + int(self.get_clipping_dist())
+        else:
+            return None
 
     def get_reference_aln_len(self):
         ''' This gives length of alignment from POV of reference according to pos field and cigar.
             Add up matches to ref and deletions from ref to get ref len in aln.
             The reference end coord is Pos + MD - 1'''
-        return sum([self.cigar[e] for e in 'MD'])
+        return sum([self.cigar[e] for e in 'MD=X']) ## used to be 'MD', which I validated -- however, I then reasoned '=X' should be added for aligners that use those instead of M...
 
     def get_reference_end_pos(self):
         ''' This gives tuple of 1-based (as SAM is) start/end on reference according to pos field and cigar.
@@ -288,6 +330,28 @@ class SamRecord(object):
     def get_3prime_clip_len(self):
         return self.get_clipping_length(cigaridx1=-1, cigaridx2=-2, clip=0)
 
+    def estimate_reference_to_read_length_ratio(self):
+        return self.get_reference_aln_len() / float( self.get_SEQ_len_without_clipped_regions() )
+
+    def estimate_reference_length_under_5prime_clip(self):
+        ## could us SCALE = sum(MD=X)/sum(MI=X) to get scale factor for clip_lens
+        ## Do int(round(Clip_Len * SCALE)) <---self.estimate_reference_to_read_length_ratio()
+        ## This will shrink clip_len if reference part is smaller -- make it bigger if it is bigger
+        ## Pitfall: as this calculation would estimate the scale_factor potentially from small portions of a long read
+        ##          it might not reflect the scale_factor that would be obtained over all aligned portions of read
+        return self.get_5prime_clip_len() * self.estimate_reference_to_read_length_ratio()
+
+
+    def estimate_reference_length_under_3prime_clip(self):
+        ## see NOTES in estimate_reference_len_under_5prime_clip
+        return self.get_3prime_clip_len() * self.estimate_reference_to_read_length_ratio()
+
+    def estimate_reference_length_for_full_read_alignment(self, use_real_clip_sizes=False):
+        if use_real_clip_sizes:
+            return self.get_5prime_clip_len() + self.get_reference_aln_len() + self.get_3prime_clip_len()
+        else:
+            return self.estimate_reference_length_under_5prime_clip() + self.get_reference_aln_len() + self.estimate_reference_length_under_3prime_clip()
+
     def get_adjusted_pos(self, initialpos, clip=0, extra=0, direction=0):
         '''This used to be a more involved function, but has been broken into smaller pieces that basically
             render it as a simple arithmetic fxn.
@@ -303,16 +367,22 @@ class SamRecord(object):
             '''
         return initialpos + direction*clip + direction*extra
 
-    def get_clipping_adjusted_start(self, extra=0):
+    def get_clipping_adjusted_start(self, extra=0, use_real_clip_sizes=True):
         ''' Adjusts start pos to be the number of HS-clipped bases 5' to reported POS'''
         initialpos = self.get_pos_field()
-        clip = self.get_5prime_clip_len()
+        if use_real_clip_sizes:
+            clip = self.get_5prime_clip_len()
+        else:
+            clip = self.estimate_reference_length_under_5prime_clip()
         direction = -1
         return self.get_adjusted_pos_field(initialpos, clip, extra, direction)
 
     def get_clipping_adjusted_end(self, extra=0):
         initialpos = self.get_reference_end_pos()
-        clip = self.get_3prime_clip_len()
+        if use_real_clip_sizes:
+            clip = self.get_3prime_clip_len()
+        else:
+            clip = self.estimate_reference_length_under_3prime_clip()
         direction = 1
         return self.get_adjusted_pos(initialpos, clip, extra, direction)
         
@@ -502,34 +572,71 @@ class SplitReadSamRecord(object):
         ''' Meant to take in list of genomic_window tuples, and return list with window lengths.'''
         return np.array([self.determine_window_length( gw ) for gw in genomic_windows])
 
+
     def determine_longest_window(self, genomic_windows):
         ''' Meant to take list of genomic_window tuples and report the indexes of longest window(s) in list.
         More than one index is returned only when there is a tie.'''
         a = self.determine_window_lengths(genomic_windows)
         return np.array(range(len(a)))[a == a.max()]
 
-    def determine_window_proportions(self, genomic_windows):
+    def determine_window_proportions(self, genomic_windows, scale_factor=False):
+        ''' Default scaling is to summed window length - giving proportion each window makes up of all windows..
+            Example of another scale_factor one might want to provide, is read length to determine if some window
+            makes up a desired proportion of the read length...'''
         a = self.determine_window_lengths(genomic_windows)
-        return a.astype(np.float)/sum(a)
+        if not scale_factor: ## Then scale_factor is the sum of window lengths (default)
+            scale_factor = sum(a)
+        return a.astype(np.float)/scale_factor
 
-    def determine_majority_window(self, genomic_windows, majority=0.7):
+    def determine_majority_window(self, genomic_windows, majority=0.5, scale_factor=False):
         ''' Meant to look at list of genomic_window tuples and report whether one window
-            makes up the majority percentage of the total window length. (reports index)
+            makes up the majority percentage of the summed length of all windows. (reports index)
             This does not mean the largest proportion (which would be same index as longest window).
             This needs the max window to be larger than a given cutoff.
             Majority is not simply 51% - it should be some number that makes sense.
-            Default majority uis 0.7 -- saying I'd like at least 70% of the total genomic window to be encompassed by one.
+            For example: 0.7 is saying I'd like at least 70% of the total genomic window to be encompassed by one.
             ...So long as majority >0.5, there should be only one gw index returned.
-            ...Nonetheless, it is coded anticipating other uses that may allow more than one window index returned.'''
-        gw_props = self.determine_window_proportions(genomic_windows)
+            ...Nonetheless, it is coded anticipating other uses that may allow more than one window index returned.
+            If a single window = 0.5 and there are >2 windows, then it is majority...'''
+        gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
         gw_max = gw.props.max()
         if gw_max >= majority:
             return np.array(range(len(gw_props)))[gw_props == gw_max]
         else:
-            return None
+            return False
+
+
+    def determine_longest_window_ratio(self, genomic_windows):
+        ''' Meant to look at list of genomic_window tuples and report whether the ratio between
+            the longest and second longest window.'''
+        gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
+        if len(gw_props) == 1:
+            return float('inf')
+        else:
+            gw_props.sort() #smallest to largest gw_props[-1]/gw_props[-2]
+            gw_props = gw_props[-1::-1] #largest to smallest
+            return gw_props[0] / float(gw_props[1])
+
+    def alignments_ordered_like_read(self, indexes=[]):
+        ''' indexes = list of indexes of the records you'd like to check.
+                e.g. you might have 3 split alignments but only want to check 2 and 3.
+            This will ensure that the records actually occur on same chrom (just to be safe),
+                then checks to see if the 5' clipping in reads agrees with POS field ordering.
+            BWA gives partitioned split alignments. So if 3 split alignments occur consecutively along
+            a genomic region, then their 5' clipping lengths should each be longer than the last.'''
+        if not indexes:
+            indexes = range(self.get_num_aln())
+        d = {'pos':[], 'clip':[]}
+        for i in indexes:
+            d['pos'].append( self.get_record(i).get_pos_field() )
+            d['clip'].append( self.get_record(i).get_5prime_clip_len() )
+        df = pandas.DataFrame(d)
+        ans = df.sort('pos')['pos'] == c.sort('clip')['pos']
+        return sum(ans) == len(indexes)
+        
                 
 
-    def get_genomic_window(self, flank=0.1, merge_dist=0):
+    def get_genomic_window(self, flank=0.1, merge_dist=0, majority=0.7):
         '''Returns 3-tuple'''
         '''flank = as in get_genomic_window_around_alignment() described below'''
         ''' merge_dist = d from self.merge(): allows a gap up to d between intervals to still be an overlap - default 0'''
@@ -543,10 +650,10 @@ class SplitReadSamRecord(object):
         '''1-based, closed.'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
         if self.get_num_aln() == 1:
-            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=False)
+            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier="single_alignment")
         elif self.get_num_aln() > 1:
             genomic_windows = []
-            bedstr = ''
+##            bedstr = ''
             for i in range(self.get_num_aln):
                 gw = self.get_record(i).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=i) 
                 genomic_windows.append( gw )
@@ -555,13 +662,15 @@ class SplitReadSamRecord(object):
 ##            bedtool = pybedtools.BedTool( bedstr, from_string=True )
 ##            merged = bedtool.merge(d=merge_dist)
             #python-only approach
-            genomic_windows.sort()
-            gw_merge = self.merge(l=gw, d=merge_dist)
-            num_merge = len(gw_merge)
-            if num_merge == 1:
+            sorted_genomic_windows = sorted(genomic_windows) ## use sorted not .sort(), so can access genomic_windows below
+            gw_merge = self.merge(l=sorted_genomic_windows, d=merge_dist)
+            num_after_merge = len(gw_merge)
+            if num_after_merge == 1:
                 #return the composite genomic window formed by overlapping genomic windows
-                return gw_merge[0]
-            elif num_merge > 1:
+                identifier = "single_merged_window"
+                single_merged_window = (gw_merge[0], gw_merge[1], gw_merge[2], identifier)
+                return single_merged_window
+            elif num_after_merge > 1:
                 # find majority
                 # if num_merge == self.get_num_aln(): then can use SamRecord objects for more info about majority alignment
                 # else: some merges occurred -- can find majority based on aln len -- can also dig into SamRecords if nec
@@ -571,15 +680,56 @@ class SplitReadSamRecord(object):
                 #       a problem with using the bp readlen is that the base-caller might seriously shorten the reads when it is dealing with lots of analog...
                 #       could do 10x readlen or min(X, 10xreadlen) .... but X needs to be > readlen + fudgefactor...
                 #       could also make it proportional to the number of events or number of raw data points...
+                #           Just checked - N=1 - same DNA sequence for BrdU, EdU, IdU, and T -- all produce similar base-seq lens but analogs segment into 1.3x more events than T (or ~25% more than T)
                 ####
                 #### Note b/c the genomic windows were extended to at least the length of reads by adjusting for clipping,
                 ####    they should not be used as is for determining the majority alignment
-                if num_merge == self.get_num_aln():
+                ####    Nor necessarily should it be a % of read length, since large portions of reads might not align
+                ####        Moreover - since these reads can be highly error prone (w/ normal bases), 50% of read might not map to 50% of alignment
+                ####                -  and w/ the analogs... read length might be really off... only would want to trust aligned regions...
+                ####    Best might be as a % of total alignment length MD=X.
+                if num_after_merge == self.get_num_aln():
                     ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
-                    pass #define majority trough gen_aln lens as well as mapquality...?
-                else:
+                    ## is there a majority? Aln that makes up > X% of summed alignment length?
+                    genomic_alignments = []
+                    for i in range(self.get_num_aln):
+                        ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
+                        genomic_alignments.append( ref_coords )
+                    majority = self.determine_majority_window(genomic_alignments, majority)
+                    if majority:
+                        ## need to get genomic window around alignment for majority alignment
+                        ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
+                        majority_alignment = genomic_windows[majority]
+                        identifier = 'majority_alignment:' #+ proportion_aligned_bases + proportion_estimated_alignment_len + num_alignments + 2nfbest...
+                        majority_window = (majority_alignment[0], majority_alignment[1], majority_alignment[2], identifier)
+                        return majority_window
+                    else:
+                        ## return longest? return multiple? use alignment scores?
+                        identifier = 'longest_alignment:' ## plus info....
+                        pass
+                else: # compare merged and single alns all at same time?
+##                    if_majority here
+##                    if_merged_majority
+##                    longest_btwn_merged_and_single
+
+                    pass
                     # there was some merging, meaning there is a site in the genome with more than one alignment within reasonable distance (in above conditions)
-                    # work on GWs instead of
+                    # check if the merged alignments make up a majority of all alignments...
+                    #  ... if not -- see if a single alignment makes up a majority...
+                    #       or should this logic be reversed...? look for majority single... then look for majority from merged...
+                    #       Well if a single makes up 0.5, then the merge can only sum to 0.5 anyway...
+                    #       Does one trust one contiguous aln more than >=2 possibly smaller disjointed alignments?
+                    #           Id say ..sure...
+                    #       If no single majority... if no merged majority, then what?
+                    #       which is longer... the single alignment or the sum of merged alignments? go with that one...
+                    #           note proportion of alignments taken by final... note proportion of readlength... or estimated ref len...
+                    # Do I check len of merged_aln_1_start to merged_aln_N_end?
+                    # Or do I just sum their aln lengths?
+                    # if doing merged_ref_len, then shouldnt I check to see if that is longer than longest single aln in beginng
+                    # i.e. majority calculation would have different denominators if using sum_aln_lens vs front_to_end_merge_len
+                
+
+                
             
             
 
@@ -588,6 +738,22 @@ class SplitReadSamRecord(object):
 
 
 
+#Functions on SAM line
+def sam_seq_len(x):
+    ''' Length of SEQ (part of READ that is soft-clipped and/or aligned) as defined by SAM specifications.'''
+    return sum([int(e) for e in re.findall('(\d+)[MIS=X]', x)])
+
+def sam_read_len(x):
+    ''' Length of entire READ as defined by SAM specifications.'''
+    return sum([int(e) for e in re.findall('(\d+)[HMIS=X]', x)])
+
+def sam_alnseq_len(x):
+    ''' Length of READ that is aligned only (no soft clipping) as defined by SAM specifications.'''
+    return sum([int(e) for e in re.findall('(\d+)[MI=X]', x)])
+
+def sam_refalnseq_len(x):
+    '''Length of REFERENCE sequence underlying the aligned portion of read.'''
+    return sum([int(e) for e in re.findall('(\d+)[MD=X]', x)])
 
 #### STUFF TO WORK IN TO MAYBE THE SAM CLASS
 ##import re, sys

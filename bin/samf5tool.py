@@ -44,14 +44,17 @@ args = parser.parse_args()
 
 
 
-sam = SamSplitAlnAggregator(args.sam)
-for read in sam:
-    print record
+##sam = SamSplitAlnAggregator(args.sam)
+##for read in sam:
+##    print record
 
+def alignment_summary(sam):
+    for read in sam:
+        print ("\t").join([str(e) for e in [read.get_qname_field(), read.get_rname_field(), read.get_pos_field(), read.get_read_len(), read.get_AS_field(), read.get_SEQ_len(), read.get_SEQ_len_without_clipped_regions(), read.get_reference_aln_len(), read.get_edit_dist_field(), read.get_edit_dist_with_clipping(), read.get_clipping_dist(), read.get_fast5_field()]])
 
+sam = Sam(args.sam)
 
-
-
+alignment_summary(sam)
 
 
 
