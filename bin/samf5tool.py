@@ -44,19 +44,46 @@ args = parser.parse_args()
 
 
 
-##sam = SamSplitAlnAggregator(args.sam)
-##for read in sam:
-##    print record
+
 
 def alignment_summary(sam):
+    '''sam is Sam object'''
     for read in sam:
         print ("\t").join([str(e) for e in [read.get_qname_field(), read.get_rname_field(), read.get_pos_field(), read.get_read_len(), read.get_AS_field(), read.get_SEQ_len(), read.get_SEQ_len_without_clipped_regions(), read.get_reference_aln_len(), read.get_edit_dist_field(), read.get_edit_dist_with_clipping(), read.get_clipping_dist(), read.get_fast5_field()]])
 
-sam = Sam(args.sam)
+def get_genomic_windows(sam):
+    ''' sam is SamSplitAlnAggregator object'''
+    for read in sam:
+##        read = SplitReadSamRecord(read)
+        if read.has_alignments():
+            ans = read.get_genomic_window(flank=0.25, merge_dist=0, majority=0.5, require_order=False, require_strand=False)
+            if ans is not None:
+                print ("\t").join( [read.get_read_name()]+[str(e) for e in ans]+[read.get_fast5_info()])
+                ## if reference fasta provided, then print out sequence in last field of table
+                ## should any other SAM info be included?
+                ## include edit dist? num matches? %id? of longest only? all alns? all_alns vs readlen?
+            else:
+                print ans
+        else:
+            pass #print to no alignments file....
 
-alignment_summary(sam)
+
+def get_pct_identity_v_Q(sam):
+    ''' sam is SamSplitAlnAggregator object'''
+    for read in sam:
+        print read.get_edit_dist_fields()
+        print ("\t").join( [read.get_read_name(), read.get_fast5_info()])
 
 
+
+
+
+##sam = Sam(args.sam)
+##alignment_summary(sam)
+
+sam = SamSplitAlnAggregator(args.sam)
+##get_genomic_windows(sam)
+get_pct_identity_v_Q(sam)
 
 
 

@@ -119,6 +119,7 @@ class SamRecord(object):
         self.fast5info = None
         self.alignment = sam_record
         self.parse_alignment()
+        self._uses_M = None
 
     def __str__(self):
         ## Return string_from_parsed b/c it updates may have been made
@@ -139,6 +140,7 @@ class SamRecord(object):
         self.parsed_aln['QUAL'] = aln[10]
         self.parsed_aln['EXTRA'] = ('\t').join( aln[11:] )
 
+
     def is_aligned(self):
         ## TODO - better definition?
         ''' This definition is useful for single-end/long reads - but not for PE reads.'''
@@ -149,6 +151,15 @@ class SamRecord(object):
         ''' This definition is useful for single-end/long reads - but not for PE reads.'''
         return self.get_rname_field() == '*'
 
+    def uses_M(self):
+        '''Assumes alignment present...'''
+        ## Note... this fails silently in that if there are no MX= in cigar string, self._uses_M stays as None
+        if self._uses_M is None:
+            if 'M' in self.get_cigar_field():
+                self._uses_M = True
+            elif 'X' in self.get_cigar_field() or '=' in self.get_cigar_field():
+                self._uses_M = False
+        return self._uses_M
 
     def get_sam_fields(self):
         return ['QNAME', 'FLAG', 'RNAME', 'POS', 'MAPQ', 'CIGAR', 'RNEXT', 'PNEXT', 'TLEN', 'SEQ', 'QUAL', 'EXTRA']
@@ -203,6 +214,77 @@ class SamRecord(object):
         for count,char in re.findall('(\d+)([MIDNSHP=X])', self.parsed_aln['CIGAR']):
             self.cigar[char] += int(count)
         return self.cigar
+
+    def get_num_cigar_matches_and_mismatches(self):
+        assert self.uses_M() == True
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['M']
+
+    def get_num_cigar_insertions_to_ref(self):
+        ''' i.e. deletions from read'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['I']
+
+    def get_num_cigar_deletions_from_ref(self):
+        ''' i.e. insertions to read'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['D']
+
+    def get_num_cigar_hard_clips(self):
+        ''' H can only be present as the first and/or last operation.'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['H']
+
+    def get_num_cigar_soft_clips(self):
+        ''' S may only have H operations between them and the ends of the CIGAR string.'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['S']
+
+    def get_num_cigar_skipped_region_from_ref(self):
+        ''' '''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['N']
+
+    def get_num_cigar_padded_silent_deletions_from_ref(self):
+        ''' The SAM format is typically used to describe alignments against an unpadded reference sequence,
+            but it is also able to describe alignments against a padded reference. In the latter case, we say we are using
+            a padded SAM. A padded SAM is a valid SAM, but with the difference that the reference and positions in use are padded.
+            There may be more than one way to describe the padded representation. We recommend the following.
+
+            In a padded SAM, alignments and coordinates are described with respect to the padded reference sequence. 
+            Unlike traditional padded representations like the ACE file format where pads/gaps are recorded in reads using *'s, 
+            we do not write *'s in the SEQ field of the SAM format.12 Instead, we describe pads in the query sequences as deletions 
+            from the padded reference using the CIGAR 'D' operation. In a padded SAM, the insertion and padding CIGAR operations 
+            ('I' and 'P') are not used because the padded reference already considers all the insertions.
+
+            Above copies from: https://samtools.github.io/hts-specs/SAMv1.pdf
+            More info there.
+            '''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['P']
+
+
+    def get_num_cigar_matches(self):
+        assert self.uses_M() == False
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['=']
+
+    def get_num_cigar_mismatches(self):
+        assert self.uses_M() == False
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.cigar['X']
+
+    def get_insertion_to_ref_count
+    
 
     def get_SEQ_len(self):
         '''SEQ as in the 10th SAM field -- or what should be there as in case of secondary alignments that often leave it as "*"'''
@@ -375,9 +457,9 @@ class SamRecord(object):
         else:
             clip = self.estimate_reference_length_under_5prime_clip()
         direction = -1
-        return self.get_adjusted_pos_field(initialpos, clip, extra, direction)
+        return self.get_adjusted_pos(initialpos, clip, extra, direction)
 
-    def get_clipping_adjusted_end(self, extra=0):
+    def get_clipping_adjusted_end(self, extra=0, use_real_clip_sizes=True):
         initialpos = self.get_reference_end_pos()
         if use_real_clip_sizes:
             clip = self.get_3prime_clip_len()
@@ -391,7 +473,7 @@ class SamRecord(object):
         '''Returns int'''
         return int( self.get_read_len() * proportion )
 
-    def get_genomic_window_around_alignment(self, flank=0, adjust_for_clipping=True, identifier=False):
+    def get_genomic_window_around_alignment(self, flank=0, adjust_for_clipping=True, identifier=None):
         '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
         ''' Default: W/o buffer/flanking sequence, it gives the clipping-adjusted guesses for start and end positions.'''
         ''' Add buffer/flank lengths to each side in two ways:'''
@@ -407,15 +489,15 @@ class SamRecord(object):
         elif flank > 1 or (flank == 1 and isinstance(flank, int)):
             extra = int(flank) 
         elif flank >= 0 and flank < 1 or (flank == 1 and isintance(flank, float)):
-            extra = int(self.get_proportion_of_read_len(proportion))
-        chrom = self.get_record(i).get_rname_field()
+            extra = int(self.get_proportion_of_read_len(flank))
+        chrom = self.get_rname_field()
         if adjust_for_clipping:
             start = self.get_clipping_adjusted_start(extra=extra)
             end = self.get_clipping_adjusted_end(extra=extra)
         else:
             start = self.get_pos_field() - extra
             end = self.get_reference_end_pos() + extra
-        if identifier:
+        if identifier is not None:
             return (chrom, start, end, identifier)
         else:
             return (chrom, start, end)
@@ -505,10 +587,12 @@ class SamSplitAlnAggregator(Sam):
             self.records = [] ## reset records
         return self.get_all_records_with_shared_named()
 
+
     def next(self):
         try:
-            self.get_next_set_of_sam_records()
-            return self.records
+            return self.get_next_set_of_sam_records()
+##            self.get_next_set_of_sam_records()
+##            return self.records
         except Exception as e:
             raise StopIteration
 
@@ -530,6 +614,41 @@ class SplitReadSamRecord(object):
             This list is typically made by parsing a sorted-by-readname SAM file with SamSplitAlnAggregator() class.'''
         self.records = samrecords
         self.num_aln = None
+        self.readname = None
+        self.fast5info = None
+        self.readlength = None
+
+    def get_read_name(self):
+        if self.readname is None:
+            self.readname = self.records[0].get_qname_field()
+            for record in self.records:
+                assert record.get_qname_field() == self.readname
+        return self.readname
+
+    def get_read_length(self):
+        if self.readlength is None:
+            self.readlength = self.records[0].get_read_len()
+            for record in self.records:
+                assert record.get_read_len() == self.readname
+        return self.readlength
+
+    def get_fast5_info(self):
+        if self.fast5info is None:
+            self.fast5info = self.records[0].get_fast5_field()
+            for record in self.records:
+                assert record.get_fast5_field() == self.fast5info
+        return self.fast5info
+
+    def get_mapq_fields(self):
+        return [record.get_mapq_field() for record in self.records]
+    
+    def get_AS_fields(self):
+        return [record.get_AS_field() for record in self.records]
+
+    def get_edit_dist_fields(self):
+        return [record.get_edit_dist_field() for record in self.records]
+
+
 
     def get_num_aln(self):
         ''' This is more accurately "number of sam records".
@@ -583,8 +702,9 @@ class SplitReadSamRecord(object):
         if self.has_alignments():
             maxalnscore = float('-inf')
             for i in range(self.get_num_aln()):
-                if self.get_AS_field() > maxalnscore:
-                    maxalnscore = self.get_AS_field() 
+                AS = self.get_record(i).get_AS_field()
+                if AS > maxalnscore:
+                    maxalnscore = AS 
                     maxalnidx = i
             return (maxalnscore, maxalnidx)
         else:
@@ -596,14 +716,20 @@ class SplitReadSamRecord(object):
             maxalnscore = float('-inf')
             secondplace = float('-inf')
             for i in range(self.get_num_aln()):
-                if self.get_AS_field() > maxalnscore:
+                AS = self.get_record(i).get_AS_field()
+                if AS > maxalnscore:
                     secondplace = maxalnscore
-                    maxalnscore = self.get_AS_field() 
-            return float(maxalnscore)/secondplace
+                    maxalnscore = AS
+                elif AS > secondplace:
+                    secondplace = AS
+            if secondplace is not float('-inf'):
+                return float(maxalnscore)/secondplace
+            else:
+                return float('inf')
         else:
             return None
 
-    def ovlp(a,b,d=0):
+    def ovlp(self, a,b,d=0):
         ''' a and b are 3-tuples of (chr,start,end)'''
         ''' assumes sorted such that, if ovlp, a is before b along number line.'''
         ''' d is distance - allows a gap up to d between intervals to still be an overlap - default 0'''
@@ -611,31 +737,51 @@ class SplitReadSamRecord(object):
             return True
 	return False
 
-    def merge(l,d=0):
+    def merge(self, l, d=0):
         ''' Takes in list of 3-tuples of (chr.start,end)'''
         ''' Returns updated list where overlapping intervals are merged'''
         ''' d is distance - allows a gap up to d between intervals to still be an overlap - default 0'''
         a = l[0]
+##        print 1, a
         update = []
         for i in range(1,len(l)):
             b = l[i]
             if self.ovlp(a,b,d):
-                a = merge_tuples(a,b) ### new merge_tuples is identifier-aware; old = (a[0],a[1],b[2])
+                a = self.merge_tuples(a,b) ### new merge_tuples is identifier-aware; old = (a[0],a[1],b[2])
             else:
                 update.append(a)
                 a = b
         ## at end, if last thng ovlpd, then it merged interval in the making (a) needs to added to 'update'
         ##         if last thing didn't ovlp, then final interval, named 'a' before exiting, needs to be added to 'update'
         update.append(a)
+##        print l,  update
         return update
 
-    def merge_tuples(a,b):
+    def merge_tuples(self, a,b):
         if len(a) == 3:
             return (a[0],a[1],b[2])
         elif len(a) == 4: ##has identifier
+##            print a
             identifier = str(a[3]) + "," + str(b[3])
             return (a[0], a[1], b[2], identifier)
 
+
+    def get_indexes_from_merged_tuples(self, genomic_windows):
+        ''' After taking genomic_windows with indexes corresponding to which SAM record each is from,
+            followed by merging these tuples, one gets a list of (possibly) merged tuples with comma-separated identifiers (in 4th position).
+            This returns two answers.
+            1. List of indexes for tuples with a merge.
+            2. For each merged tuple, list of indexes of the SAM records that were merged.
+            These answers are the keys and values of a single dictionary:
+            {merge_idx:[sam_Record_idxs]}
+            If there are no merges, an empty dict is returned.'''
+        idx = {}
+        for i in range(len(genomic_windows)):
+##            print genomic_windows
+            sam_idx = [int(e) for e in str(genomic_windows[i][3]).split(",")]
+            if len(sam_idx) > 1:
+                idx[i] = sam_idx
+        return idx
 
     def determine_window_length(self, genomic_window):
         ''' Meant to take in single genomic_window tuple and report length back'''
@@ -674,7 +820,7 @@ class SplitReadSamRecord(object):
         gw_props = genomic_windows
         if not proportions_provided: #default is that proportions are obtained herein, but it makes more sense for some use cases to create/store the proportions array for other purposes in which case it can be provided.
             gw_props = self.determine_window_proportions(genomic_windows, scale_factor)
-        gw_max = gw.props.max()
+        gw_max = gw_props.max()
         if gw_max >= majority:
             return np.array(range(len(gw_props)))[gw_props == gw_max]
         else:
@@ -691,8 +837,7 @@ class SplitReadSamRecord(object):
         if len(gw_props) == 1:
             return float('inf')
         else:
-            gw_props.sort() #smallest to largest gw_props[-1]/gw_props[-2]
-            gw_props = gw_props[-1::-1] #largest to smallest
+            gw_props = sorted(gw_props)[-1::-1] #largest to smallest
             return gw_props[0] / float(gw_props[1])
 
     def alignments_ordered_like_read(self, indexes=[]):
@@ -710,18 +855,18 @@ class SplitReadSamRecord(object):
             d['pos'].append( self.get_record(i).get_pos_field() )
             d['clip'].append( self.get_record(i).get_5prime_clip_len() )
         df = pandas.DataFrame(d)
-        ans = df.sort('pos')['pos'] == c.sort('clip')['pos']
+        ans = df.sort('pos')['pos'] == df.sort('clip')['pos']
         return sum(ans) == len(indexes)
-
 
 
     def strands_of_alignments(self, indexes=[]):
         if not indexes:
             indexes = range(self.get_num_aln())
         strands = np.zeros(len(indexes))
-        for i in indexes:
-            strands[i] = self.get_record(i).reference_strand() 
+        for i in range(len(indexes)):
+            strands[i] = self.get_record(indexes[i]).reference_strand() 
         return strands
+    
     def alignments_on_same_strand(self, indexes=[]):
         ''' ASSUMES all are on the same chrom... though violating this will likely return False
                 In future: can have it ensure that the records actually occur on same chrom (just to be safe)...
@@ -751,9 +896,9 @@ class SplitReadSamRecord(object):
             indexes = range(self.get_num_aln())
         d = {'start':[], 'end':[]}
         # initialize
-        d['start'].append( self.get_record(0).get_pos_field() )
-        d['end'].append( self.get_record(0).get_reference_end_pos() )
-        chrom = self.get_record(0).get_rname_field()
+        d['start'].append( self.get_record(indexes[0]).get_pos_field() )
+        d['end'].append( self.get_record(indexes[0]).get_reference_end_pos() )
+        chrom = self.get_record(indexes[0]).get_rname_field()
         for i in indexes[1:]:
             if self.get_record(i).get_rname_field() != chrom:
                 return None
@@ -762,14 +907,46 @@ class SplitReadSamRecord(object):
         start = sorted(d['start'])[0]
         end = sorted(d['end'])[-1]
         return (chrom, start, end)
-        
+
+    def get_merge_with_max_spanning_alignment(self, idx, require_order=False, require_strand=False):
+        ''' idx = doctionary output of get_index_from_merged_tuples().
+            require_order = when True, output from alignments_ordered_like_read() must be True to be considered a valid merge.
+            require_strand = when True, output from alignments_on_same_strand() must be True to be considered a valid merge.
+            Only 'valid merges' are considered for max spanning alignment:
+                all merges by default,
+                filtered with require_order and require_strand as described above.
+            Returns index of max_merge and the max span len.
+            max_span is set to False when there are no valid merges.'''
+        max_span_len = 0
+        same_order_as_read = True ## Set to True when require_order=False -- although may not be True. Can be detected as False if require_order=True.
+        same_strand = True ## Set to True when require_strand=False -- although may not be True. Can be detected as False if require_strand=True.
+        max_span_i = None
+        for merge_i in idx.keys():
+            sam_idx_list = idx[merge_i]
+            span_coords = self.get_spanning_alignment_coordinates(sam_idx_list)
+            merge_span_len = span_coords[2] - span_coords[1] + 1
+            if require_order:
+                same_order_as_read = self.alignments_ordered_like_read(sam_idx_list)
+            if require_strand:
+                same_strand = self.alignments_on_same_strand(sam_idx_list)
+            if merge_span_len > max_span_len and same_order_as_read and same_strand:
+                max_span_len = merge_span_len
+                max_span_i = merge_i
+##        print 111, max_span_i
+##        print 111, max_span_len
+        return (max_span_i, max_span_len)
                 
 
-    def get_genomic_window(self, flank=0.1, merge_dist=0, majority=0.7):
+                
+
+    def get_genomic_window(self, flank=0.1, merge_dist=0, majority=0.5, require_order=False, require_strand=False):
         '''Returns 3-tuple'''
         '''flank = as in get_genomic_window_around_alignment() described below'''
-        ''' merge_dist = d from self.merge(): allows a gap up to d between intervals to still be an overlap - default 0'''
-        ''' From the individual get_genomic_window_around_alignment():'''
+        ''' merge_dist = d from self.merge(): allows a gap up to d between intervals to still be an overlap - default 0
+            majority = threshold to exceed to be consider a majority.
+            require_order = as described in get_merge_with_max_spanning_alignment()
+            require_strand = as described in get_merge_with_max_spanning_alignment()'''
+        ''' Passage from the individual SamRecord function get_genomic_window_around_alignment():'''
         '''Get genomic window surrounding an alignment with some buffer/flanks -- e.g. for local re-alignment.'''
         ''' Default: W/o buffer/flanking sequence, it gives the clipping-adjusted guesses for start and end positions.'''
         ''' Add buffer/flanks two ways:'''
@@ -779,13 +956,16 @@ class SplitReadSamRecord(object):
         '''1-based, closed.'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
         if not self.has_alignments():
+            print -1
             return None ## No alignments, therefore no genomic window.
         elif self.get_num_aln() == 1: ## although get_num_aln() will report 1 for unaligned SAM records, those are taken care of above.
+            print 0
             return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier="single_alignment")
         elif self.get_num_aln() > 1:
+            print 1
             genomic_windows = []
 ##            bedstr = ''
-            for i in range(self.get_num_aln):
+            for i in range(self.get_num_aln()):
                 gw = self.get_record(i).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=i) 
                 genomic_windows.append( gw )
 ##                bedstr = chrom + "\t" + str(gw[0]-1) + "\t" + str(gw[1])
@@ -797,11 +977,13 @@ class SplitReadSamRecord(object):
             gw_merge = self.merge(l=sorted_genomic_windows, d=merge_dist)
             num_after_merge = len(gw_merge)
             if num_after_merge == 1:
+                print 2,1
                 #return the composite genomic window formed by overlapping genomic windows
                 identifier = "single_merged_window"
-                single_merged_window = (gw_merge[0], gw_merge[1], gw_merge[2], identifier)
+                single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
                 return single_merged_window
             elif num_after_merge > 1:
+                print 2,2
                 # find majority
                 # if num_merge == self.get_num_aln(): then can use SamRecord objects for more info about majority alignment
                 # else: some merges occurred -- can find majority based on aln len -- can also dig into SamRecords if nec
@@ -820,45 +1002,102 @@ class SplitReadSamRecord(object):
                 ####                -  and w/ the analogs... read length might be really off... only would want to trust aligned regions...
                 ####    Best might be as a % of total alignment length MD=X.
                 split_alignments = []
-                for i in range(self.get_num_aln):
+                for i in range(self.get_num_aln()):
                     ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
                     split_alignments.append( ref_coords )
+                split_aln_lengths = self.determine_window_lengths(split_alignments)
                 split_alignment_proportions = self.determine_window_proportions(split_alignments)
                 split_alignment_majority = self.determine_majority_window(split_alignment_proportions, majority, proportions_provided=True)
                 if split_alignment_majority:
+                    print 3,1
                     chosen_alignment_index = split_alignment_majority[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
                 else:
-                    chosen_alignment_index = self.determine_longest_window()
+                    print 3,2
+                    chosen_alignment_index = self.determine_longest_window(split_alignments)[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
                 AS = self.get_record(chosen_alignment_index).get_AS_field()    
                 split_alignment_top2_ratio = self.determine_longest_window_ratio(split_alignment_proportions, proportions_provided=True)
                 split_alignment_highest_AS = self.determine_highest_alignment_score()[0]
                 split_alignment_top2_AS_ratio = self.determine_highest_alignment_score_ratio()
-                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
+                longest_aln = split_aln_lengths[chosen_alignment_index]
+                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
                 chosen_alignment = genomic_windows[chosen_alignment_index]
-                longest = self.determine_window_lengths()[chosen_alignment_index]
                 if num_after_merge == self.get_num_aln():
+                    print 4,1
                     ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
                     ## is there a majority? Aln that makes up > X% of summed alignment length?
-                   if split_alignment_majority:
+                    if split_alignment_majority:
+                        print 5,1
                         ## need to get genomic window around alignment for majority alignment
                         ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
 
                         identifier = 'majority_alignment|' +  split_alignment_label
                     else:
+                        print 5,2
                         ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
-                        identifier = 'longest_alignment:' + split_alignment_label
+                        identifier = 'longest_alignment|' + split_alignment_label
                     chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
                     return chosen_alignment_genomic_window
-                else: # compare merged and single alns all at same time?
+                else:
+                    print 6
+                    # compare merged and single alns all at same time?
                     #is there a merge that exceeds the max align length?
                     #   gather information:
                     #     does that merge contain alignments in same order as found along read?
                     #     are the alignments inside merge from the same strand?
                     #     is the sum of the alignments in that span also longer than longest single aln?
                     #     is the sum of the aln scores higher than the single aln score?
-                    
+                    merge_idx_dict = self.get_indexes_from_merged_tuples(gw_merge)
+                    # determine if a given merge is interesting:
+                    # -- note require_strand and require_order should be false for now. Noise and other artifacts can cause the ignoring of an actually valid merge.
+                    #   potentially better to just add that information to identifier-string        
+                    merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
 
-                    pass
+                    if merge_with_max_spanning_aln[0] is not None: ## (i,j): i = False when no valid merges, merge_idx when there is; j = span_len
+                        print 7,1
+                        sam_idx_list = merge_idx_dict[merge_with_max_spanning_aln[0]]
+                        same_order_as_read = self.alignments_ordered_like_read(sam_idx_list)
+                        same_strand = (',').join( [str(e) for e in self.alignments_on_same_strand(sam_idx_list)] )
+                        sum_aln = sum([split_aln_lengths[i] for i in sam_idx_list])
+                        sum_aln_gt_longest = sum_aln > longest_aln
+                        longest_in_merge = chosen_alignment_index in sam_idx_list
+                        sum_AS = sum([self.get_record(i).get_AS_field() for i in sam_idx_list])
+                        sum_AS_gt_longest_AS = sum_AS > AS
+                        sum_AS_gt_highest_AS = sum_AS > split_alignment_highest_AS
+                        merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) 
+                        if merge_with_max_spanning_aln[1] > longest_aln:
+                            print 8,1
+                            chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
+                            if split_alignment_majority:
+                                print 9,1
+                                identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label
+                            else:
+                                print 9,2, merge_with_max_spanning_aln
+                                identifier = 'longest_merge_span_gt_longest_aln|' + merge_label + '|' + split_alignment_label
+                        else:
+                            print 8,2
+                            chosen_genomic_window = chosen_alignment
+                            if split_alignment_majority:
+                                print 9,3
+                                identifier = 'longest_merge_span_lt_majority_aln|' + merge_label + '|' + split_alignment_label
+                            else:
+                                print 9,4
+                                identifier = 'longest_merge_span_lt_longest_aln|' + merge_label + '|' + split_alignment_label
+                        chosen_genomic_window = (chosen_genomic_window[0], chosen_genomic_window[1], chosen_genomic_window[2], identifier)
+                        return chosen_genomic_window
+                    else:
+                        print 7,2, 'same as', 4,1
+                        ## REPEATED CODE BELOW....(repeated from above single_aln area)... can maybe have function?
+                        ## No valid merge - choose from alignments
+                        if split_alignment_majority:
+                            ## need to get genomic window around alignment for majority alignment
+                            identifier = 'majority_alignment|' +  split_alignment_label
+                        else:
+                            ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
+                            identifier = 'longest_alignment|' + split_alignment_label
+                        chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
+                        return chosen_alignment_genomic_window
+
+                
                     # there was some merging, meaning there is a site in the genome with more than one alignment within reasonable distance (in above conditions)
                     # check if the merged alignments make up a majority of all alignments...
                     #  ... if not -- see if a single alignment makes up a majority...
@@ -1094,4 +1333,98 @@ def sam_refalnseq_len(x):
 ##pct_multi_ctg = num_multi_ctg/float(num_0_ctg + num_1_ctg + num_multi_ctg)
 ##
 
+##out = open('$PRE-per-read-stats.txt','w')
+##out.write( 'numentries\t'+str(numentries)+'\n' )
+##out.write( 'numuniqentries\t'+str(numuniqentries)+'\n' )
+##out.write( 'totalnumaln\t'+str(totalnumaln)+'\n' )
+##out.write( 'totalnumuniqaln\t'+str(totalnumuniqaln)+'\n' )
+
+##out.write( 'numaln_with_un_should_be_0\t'+str(numaln_un)+'\n' )
+##out.write( 'num_unaln\t'+str(numunaln)+'\n' )
+##out.write( 'num_0_ctg\t'+str(num_0_ctg)+'\n' ) ## should be same as num_unaln
+##out.write( 'num_1_ctg\t'+str(num_1_ctg)+'\n' ) ## should be same as totalnumuniqaln
+##out.write( 'num_multi_ctg\t'+str(num_multi_ctg)+'\n' )
+##out.write( 'readlensum\t'+str(readlensum)+'\n' )
+##out.write( 'alnlensum\t'+str(alnlensum)+'\n' )
+##out.write( 'unalnportionsum\t'+str(unalnportionsum)+'\n' )
+##out.write( 'unmappedreadlensum\t'+str(unmappedreadlensum)+'\n' )
+##out.write( 'editsum\t'+str(editsum)+'\n' )
+
+##out.write( 'totaleditsum\t'+str(totaleditsum)+'\n' )
+##out.write( 'sum_matches\t'+str(matches)+'\n' )
+##
+##
+##
+##out.write( 'pctalnlen\t'+str(pctalnlen)+'\n' )
+##out.write( 'pctedit_allreads\t'+str(pctedit_allreads)+'\n' )
+##out.write( 'pctmatch_allreads\t'+str(pctmatch_allreads)+'\n' )
+##out.write( 'pctedit_alnreads\t'+str(pctedit_alnreads)+'\n' )
+##out.write( 'pctmatch_alnreads\t'+str(pctmatch_alnreads)+'\n' )
+##out.write( 'pctedit_alns\t'+str(pctedit_alns)+'\n' )
+##out.write( 'pctmatch_alns\t'+str(pctmatch_alns)+'\n' )
+##
+##
+##out.write( 'pct_reads_that_aln\t'+str(pctaln_old)+'\n' )
+##out.write( 'alnratio\t'+str(alnratio)+'\n' )
+##out.write( 'pct_0_ctg\t'+str(pct_0_ctg)+'\n' ) ## should be same as pct_reads_that_dont_align
+##out.write( 'pct_1_ctg\t'+str(pct_1_ctg)+'\n' ) ## should be <= pct_reads_that_aln
+##out.write( 'pct_multi_ctg\t'+str(pct_multi_ctg)+'\n' ) ## should be <= pct_reads_that_aln
+##
+##out.write( 'avgalnlen_allaln\t'+str(avgalnlen_allaln)+'\n' )
+##out.write( 'avgalnlen_allalnread\t'+str(avgalnlen_allalnread)+'\n' )
+##out.write( 'avgalnlen_allread\t'+str(avgalnlen_allread)+'\n' )
+##
+##out.write( 'summapq_per_aln\t'+str(summapq_old)+'\n' )
+##out.write( 'avgmapq_per_aln\t'+str(avgmapq_old)+'\n' )
+##out.write( 'mapqsum_per_read\t'+str(mapqsum)+'\n' )
+##out.write( 'avgmapq_per_read\t'+str(avgmapq)+'\n' )
+##out.write( 'avgmapq_with_unmap\t'+str(avgmapq_with_unmap)+'\n' )
+##
+##
+##out.write( 'alnscoresum_per_aln\t'+str(sumalnscore_per_aln)+'\n' )
+##out.write( 'avgalnscore_per_aln\t'+str(avgalnscore_per_aln)+'\n' )
+##out.write( 'alnscoresum_aln_reads\t'+str(alnscoresum)+'\n' )
+##out.write( 'avgalnscore_aln_reads\t'+str(avgalnscore)+'\n' )
+##out.write( 'avgalnscore_allreads\t'+str(avgalnscore_with_unmap)+'\n' )
+##
+##
+##out.write( 'mapqsum2\t'+str(mapqsum2)+'\n' )
+##out.write( 'avgmapq2\t'+str(avgmapq2)+'\n' )
+##out.write( 'alnscoresum2\t'+str(alnscoresum2)+'\n' )
+##out.write( 'avgalnscore2\t'+str(avgalnscore2)+'\n' )
+##
+##
+##out.write( '\t'+str()+'\n' )
+##out.close()
+##
+##
+#####################################
+##
+##out = open('$PRE-per-read-stats.simple.txt','w')
+##
+##out.write( 'alnlensum\t'+str(alnlensum)+'\n' )
+##out.write( 'sum_matches\t'+str(matches)+'\n' )
+##
+##out.write( 'pctalnlen\t'+str(pctalnlen)+'\n' )
+##out.write( 'pctmatch_allreads\t'+str(pctmatch_allreads)+'\n' )
+##out.write( 'pctmatch_alnreads\t'+str(pctmatch_alnreads)+'\n' )
+##out.write( 'pctmatch_alns\t'+str(pctmatch_alns)+'\n' )
+##
+##out.write( 'pct_reads_that_aln\t'+str(pctaln_old)+'\n' )
+##out.write( 'alnratio\t'+str(alnratio)+'\n' )
+##out.write( 'pct_multi_ctg\t'+str(pct_multi_ctg)+'\n' ) ## should be <= pct_reads_that_aln
+##
+##out.write( 'avgalnlen_allaln\t'+str(avgalnlen_allaln)+'\n' )
+##out.write( 'avgalnlen_allalnread\t'+str(avgalnlen_allalnread)+'\n' )
+##out.write( 'avgalnlen_allread\t'+str(avgalnlen_allread)+'\n' )
+##
+##out.write( 'avgmapq_per_aln\t'+str(avgmapq_old)+'\n' )
+##out.write( 'avgmapq_per_read\t'+str(avgmapq)+'\n' )
+##out.write( 'avgmapq_with_unmap\t'+str(avgmapq_with_unmap)+'\n' )
+##
+##out.write( 'avgalnscore_per_aln\t'+str(avgalnscore_per_aln)+'\n' )
+##out.write( 'avgalnscore_aln_reads\t'+str(avgalnscore)+'\n' )
+##out.write( 'avgalnscore_allreads\t'+str(avgalnscore_with_unmap)+'\n' )
+##
+##out.close()
 
