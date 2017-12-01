@@ -68,18 +68,24 @@ def get_genomic_windows(sam):
             pass #print to no alignments file....
 
 
+def get_aln_pct_identity_v_Q(sam):
+    for read in sam:
+        cigar = read.cigar
+        print ("\t").join( [str(e) for e in [read.get_edit_dist_field(), read.get_read_len(), read.get_SEQ_len(), read.get_SEQ_len_without_clipped_regions(), read.get_fast5_field(), read.get_cigar_counts()]])
+        
 def get_pct_identity_v_Q(sam):
     ''' sam is SamSplitAlnAggregator object'''
     for read in sam:
-        print read.get_edit_dist_fields()
+        print read.get_edit_dist_fields(), sum(read.get_edit_dist_fields()), read.get_read_length()
         print ("\t").join( [read.get_read_name(), read.get_fast5_info()])
 
 
 
 
 
-##sam = Sam(args.sam)
+sam = Sam(args.sam)
 ##alignment_summary(sam)
+get_aln_pct_identity_v_Q(sam)
 
 sam = SamSplitAlnAggregator(args.sam)
 ##get_genomic_windows(sam)

@@ -283,7 +283,6 @@ class SamRecord(object):
             self.get_cigar_counts()
         return self.cigar['X']
 
-    def get_insertion_to_ref_count
     
 
     def get_SEQ_len(self):
@@ -629,7 +628,7 @@ class SplitReadSamRecord(object):
         if self.readlength is None:
             self.readlength = self.records[0].get_read_len()
             for record in self.records:
-                assert record.get_read_len() == self.readname
+                assert record.get_read_len() == self.readlength
         return self.readlength
 
     def get_fast5_info(self):
@@ -648,7 +647,90 @@ class SplitReadSamRecord(object):
     def get_edit_dist_fields(self):
         return [record.get_edit_dist_field() for record in self.records]
 
+    def get_pct_identity(self):
+        '''As far as I can tell, each NM:i: editdist (in BWA) only applies to the part of read that maps to underlying reference POS to POS+sum(MDX=).
+            If one looks at number of soft clips or hard clips, both often exceed NM -- therefore, they must not be included in it.
+            So pct identity of an individual aligned region is 100*NM/read.get_SEQ_len_without_clipped_regions().
+            And the pct identity of all aligned regions is 100*sum(NM)/sum(read.get_SEQ_len_without_clipped_regions())
 
+            Wait:
+            EDIT DIST = NM = n_mismatch + n_del + n_ins = number of changes needed to transform string1 to string2
+            But qlen = n_match + n_mismatch + n_ins
+            And rlen = n_match + n_mismatch + n_del
+            So if you have a cigar of 5M5I5M and another of 5M5D5M, and NM=6 for each,
+                then NM/qlen != NM/rlen b/c qlen != rlen (not necessarily anyway)
+            Few things:
+                n_mismatch = NM - n_del - n_ins
+                So we can know that.
+                Therefore, we can know n_match as M-n_mismatch (where M is M from cigar string).
+                n_match = M - (NM - n_del - n_ins)
+                so pct_match could be n_match/(n_match+n_mismatch) = (M-(NM-n_del-n_ins))/M
+                But pct_match ignores indels...
+                One could get pct of bases in read that form matches by:
+                pct_read = n_match/read_len = (M-(NM-ndel-nins))/read_len
+
+            Blast pct id?
+            If you give blast: Query v Subject (below are fake used to convey small point)
+            If you give blast: AAAAA v AAAAA: Identities = 5/5 (100%)
+            If you give blast: AAGAA v AAAAA: (mm) Identities = 4/5 (80%)
+            If you give blast: AAGAAA v AAAAA: (ins) Identities = 5/6 (83.3%)
+            If you give blast: AAAA   v AAGAA: (del) Identities = 4/5 (80%)
+            In general it is: number_matches / local_alignment_length
+            ...where local_aln_length = n_match + n_mismatch + n_ins + n_del = M+I+D in cigar-speak
+            So technically one cannot 'exactly' get pct identity across whole read if there are H and S present... one would need to know how many MDI it would form.
+            But I do show a way to approximate it below b/c while pcr_identity as described above is great to talk about the
+                aligned portions of a read, it is not fantastic for talking about the quality of the entire read.
+            
+            To ponder:
+            One can get a normalized EDIT by:
+                EDIT/CIGAR_LEN = (n_mm + n_ins + n_del) / (n_mm + n_ins + n_del + n_match)
+            One can get normalized edit for read across all split alignments by:
+                Sum(EDITS)/Sum(CIGAR_LENS)
+            However, this of course might ignore the fact that large portions of the read did not align -- i.e. clipping.
+            Thus, a 100kb read with 1 kb aligned and Edit=100 would get same score as a fully aligned 1 kb read with Edit=100.
+            As far as the aligned sections go, we should consider them equivalent.
+            As far as the entirety of the reads, there clearly is more wrong with the 100kb read than the 1kb read.
+            So if one wants more info about the full read need to consider its full length and how much is aligned vs not.
+            
+            One can get a read_length normalized EDIT by:
+                sum(NM)/readlen
+
+            However, this could is overly optimistic for reads with LOTS of clipping.
+            The normalized Edit here would seem smaller for that 100 kb read than the 1 kb read described above.
+            This is b/c it is not incorporating unaligned info.
+            
+            Another way would be to do:
+                total_distance = (sum(NM)+sum(unused_clipping))
+                n_EDIT = (sum(NM)+sum(unused_clipping))/readlen   -- where unused clipping is only amount of clipped bases that do not appear as aligned bases in another one of mutliple split alignments
+                       = total_distance/readlen
+            This way would clearly judge the 100kb read as worse... which is more in line with what we'd want to know.
+            This one might be overly pessimistic -- since some of the clipped stuff might have been mathces -- but I wouldn't think by too much.
+                -> pessimistic b/c:  some of the clipped stuff might have been mathces
+                -> pessimistic b/c:  the cigar for the clipped regions if they were to align as well as across all the aligned regions is likely longer than the readlen
+                    ..therefore the normalized edit appears higher than it would be given the fully aligned known cigar
+                -> one could potentially remedy this by using cigar lengths
+                    adjusted_read_len = cigar_of_all_aligned_regions+sum(unused_clipping)
+                    adjusted_read_len = bst guess at total alignment len
+                best way to estimate normalized EDIT:
+                    n_EDIT = (sum(NM)+sum(unused_clipping))/(sum(cigar_of_all_aligned_regions)+sum(unused_clipping))
+                           = (sum(NM)+sum(unused_clipping))/
+                           = total_distance/total_alignment
+
+            Turn this around:
+                num_matches = total_alignment - total_distance
+                            = (sum(cigar_of_all_aligned_regions) + sum(unused_clipping)) - (sum(NM)+sum(unused_clipping))
+                            = (sum(cigar_of_all_aligned_regions) - sum(NM)
+                            = (n_match + n_mismatch + n_ins + n_del) - (n_mismatch + n_ins + n_del)
+                            = n_match
+                pct_identity_including_clipped_regions = (total_alignment - total_distance)/total_alignment
+            
+            
+            As a proxy, I used to use:
+                (read_len-NM)/readlen
+            However, I guess I could do better as above.
+            
+        '''
+        
 
     def get_num_aln(self):
         ''' This is more accurately "number of sam records".
