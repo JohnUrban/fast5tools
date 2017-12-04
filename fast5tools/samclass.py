@@ -304,7 +304,34 @@ class SamRecord(object):
         ''' Length of actually aligned portion.'''
         if self.cigar is None: 
             self.get_cigar_counts()
-        return sum([self.cigar[e] for e in 'MI=X']) 
+        return sum([self.cigar[e] for e in 'MI=X'])
+
+    def get_alignment_length(self):
+        ''' Sum of all CIGAR operations'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return sum([self.cigar[e] for e in 'HSMID=XNP'])
+
+    def get_alignment_length_MDI(self):
+        ''' Sum of M+D+I = n_match + n_mismatch + n_ins + n_del
+            No clipping included.
+            No N or P operations included.
+            =X included in case aligner used those instead of M'''
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return sum([self.cigar[e] for e in 'MDI=X'])
+
+    def get_num_matches_MDI_NM(self):
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        return self.get_alignment_length_MDI() - self.get_edit_dist_field()
+
+    def get_num_mismatches_MDI_NM(self):
+        if self.cigar is None: 
+            self.get_cigar_counts()
+        # RETURN: M - (MDI - NM) = M + NM - MDI = NM - DI
+        # Below: M - n_match = n_mis+n_match - n_match
+        return self.cigar['M'] - self.get_num_matches_MDI_NM()
 
 
     def update_pos_field(self, add=0, replace=None): ## example use: doubled ecoli genome for mapping over breakpoint; now want to subtract G_size from anything greater than G_size to put back on first copy
@@ -410,6 +437,28 @@ class SamRecord(object):
 
     def get_3prime_clip_len(self):
         return self.get_clipping_length(cigaridx1=-1, cigaridx2=-2, clip=0)
+
+    def get_start_pos_on_read(self):
+        ''' Using 1-based, closed indexing.
+            Where does alignment start on the read?
+            Count up 5' clipping.
+            Start = 5primeClipLen + 1'''
+        return self.get_5prime_clip_len() + 1
+
+
+    def get_end_pos_on_read(self):
+        ''' Using 1-based, closed indexing.
+            Where does alignment END on the read?
+                End = 5primeClipLen + SEQ_len_without_clipped_regions  ## no + 1 b/c closed indexing
+                    = start_pos_on_read + SEQ_len_without_clipped_regions - 1
+            Assertion:
+                This should give same answer as:
+                End = ReadLen - 3primeClipLen
+            '''
+        end = self.get_5prime_clip_len()  + self.get_SEQ_len_without_clipped_regions()
+        assert end == self.get_read_len() - self.get_3prime_clip_len()
+        return end
+    
 
     def estimate_reference_to_read_length_ratio(self):
         return self.get_reference_aln_len() / float( self.get_SEQ_len_without_clipped_regions() )
@@ -616,6 +665,12 @@ class SplitReadSamRecord(object):
         self.readname = None
         self.fast5info = None
         self.readlength = None
+        self.pctid = None
+##        self.readcoords = None
+        self.alnstring = None
+        self.pct_aln = None
+        self.pct_unaln = None
+        self.alncounts = None
 
     def get_read_name(self):
         if self.readname is None:
@@ -647,7 +702,42 @@ class SplitReadSamRecord(object):
     def get_edit_dist_fields(self):
         return [record.get_edit_dist_field() for record in self.records]
 
-    def get_pct_identity(self):
+    def get_MDI_alignment_lengths(self):
+        return [record.get_alignment_length_MDI() for record in self.records]
+
+    def get_num_aln(self):
+        ''' This is more accurately "number of sam records".
+            However, I left it as is, since the functions that use it will
+            typically be using it when 1+ sam records is an alignment.
+            This will report unaligned SAM records as 1 alignment.... so be careful to use with "has_alignments()"'''
+        if self.num_aln is None:
+            self.num_aln = len(self.records)
+        return self.num_aln
+
+    def has_alignments(self):
+        ''' Looks for at least one record with an alignment.'''
+        for i in range(self.get_num_aln()):
+            if self.get_record(i).is_aligned():
+                return True
+        return False
+
+    def has_only_records_that_are_aligned(self):
+        ''' This ensures all SAM records are for alignments - not unaligned reads.
+            This is essentially redundant with has_alignments() since it appears the possibilities for a SAM record are:
+                1. unaligned read
+                2. aligned read - only alignment
+                3. aligned read - 1 of N alignments'''
+        count = 0
+        for i in range(self.get_num_aln()):
+            if self.get_record(i).is_aligned():
+                count+=1
+        return self.get_num_aln() == count
+
+
+    def get_record(self,index):
+        return self.records[index]
+
+    def get_pct_identity(self, aligned_regions_only=False):
         '''As far as I can tell, each NM:i: editdist (in BWA) only applies to the part of read that maps to underlying reference POS to POS+sum(MDX=).
             If one looks at number of soft clips or hard clips, both often exceed NM -- therefore, they must not be included in it.
             So pct identity of an individual aligned region is 100*NM/read.get_SEQ_len_without_clipped_regions().
@@ -660,15 +750,72 @@ class SplitReadSamRecord(object):
             So if you have a cigar of 5M5I5M and another of 5M5D5M, and NM=6 for each,
                 then NM/qlen != NM/rlen b/c qlen != rlen (not necessarily anyway)
             Few things:
-                n_mismatch = NM - n_del - n_ins
+                    n_mismatch  = NM - n_del - n_ins
+                                = NM - D - I
                 So we can know that.
                 Therefore, we can know n_match as M-n_mismatch (where M is M from cigar string).
-                n_match = M - (NM - n_del - n_ins)
-                so pct_match could be n_match/(n_match+n_mismatch) = (M-(NM-n_del-n_ins))/M
-                But pct_match ignores indels...
+                    n_match     = M - (NM - n_del - n_ins)
+                                = M - (NM - D -I)
+                                = M+D+I - NM
+                                = MDI - NM
+                note: you can use MDI to represent the sum of MDI from all alignments and NM to represnt sum NM of all alignments (( or both from one aln ))
+                so pct_match could be:
+                    pct_match   = 100 * n_match/(n_match+n_mismatch)
+                                = 100 * (MDI - NM)/M
+                But pct_match ignores indels by subtracting them out... it is telling you something about M
+                
                 One could get pct of bases in read that form matches by:
-                pct_read = n_match/read_len = (M-(NM-ndel-nins))/read_len
+                    pct_matches_in_read    = 100 * n_match/read_len
+                                = 100 * (M-(NM-ndel-nins))/read_len
+                                = 100 * (MDI - NM)/read_len
+                                ...where MDI and NM are sums from all split alignments if they exist
+                This has some issues:
+                    1. if there is overlap between split alignments, it can over-estimate the
+                        number of bases in the read that are involved in match operations.
+                    2. the denominator of read length instead of alignment length treats all non-matches as if they were mismatches.
+                Can fix #2 by:
+                    pct_matches_in_read_aln = pct matches in alignment
+                                            = 100 * (MDI - NM)/MDI
+                This clearly makes more sense since it translates to:
+                                            = 100 * ( (n_match + n_mismatch + n_ins + n_del) - (n_mismatch + n_ins + n_del)/ (n_match + n_mismatch + n_ins + n_del)
+                                            = 100 * n_match / (n_match + n_mismatch + n_ins + n_del)
+                However, now parts of the read not involved in an alignment are ignored. These are clipping regions in all alignments.
+                So we need to adjust this to:
+                            pct_matches     = 100 * n_match / (n_match + n_mismatch + n_ins + n_del + n_unaligned)
+                                            = 100 * (MDI - NM) / (MDI + n_unaligned)
+                This has a few issues, but is best we can do for now (as also discussed below, coming at this from different angle):
+                    1. Treats all unaligned bases as mismatches rather than collection of matches, mismatches, insertions, and deletions.
+                        This likely results in a smaller denominator and therefore slightly larger %match.
+                        One could also say that this treats the unaligned bases as insertions though, or mismatches and insertions (to reference).
+                        Since they were involved only in clipping and were not aligned though, we miss out on the number of deletions that might be there...
+                        An alternative could be to multiply the unaligned base length by 2.
+                        This would treat the unaligned bases as an alternating set of insertions and deletions in the reference.
+                        That operation would therefore likely over-estimate the alignment length if forced.
+                        Probably thinking of them as mismatches or insertions makes most sense for now.
+                    2. Overlapping sections between split alignments are given more weight in determining the pct_matches than
+                        other non-overlapping regions of read...
+                        This effect -- in pilot analyses -- seems small though. Determining average from NM and CIGAR alone is not possible.
+                        Would need MD string - but not using it for now.
 
+            I also thought of a scaling alternative to treating unaligned bases as mismatches:
+                pct matches across read = pct matches in alignments scaled by pct of read that is aligned.
+                                        =  100 * [(MDI - NM) / (MDI)] * [n_alignned/(n_aligned+n_unaligned)]
+                                        = 100 * [(MDI-NM)*(n_aligned)] / [(MDI)*(n_aligned+n_unaligned)]
+                                        = 100 * [n_match * n_aligned] / [MDI * readlen]
+                                        = 100 * n_match * n_aligned / (n_match + n_mismatch + n_ins + n_del) * readlen
+                                        = 100 * n_aligned/readlen * n_match/(n_match + n_mismatch + n_ins + n_del)
+                                        = scalng pct_match to aligned proportion of read
+                                        = penalizing as aligned proportion gets smaller
+                                        = rewarding as aligned proportion gets bigger
+                                        = returning same score when 100% of read is aligned.
+                        This seems to typically return a lower (but not by much) estimate than treating unaligned bases as all mismatches (or insertions).
+                        Scaling is typically >99% the same number. Nonetheless, that would suggest scaling is ever so slightly more conservative.
+                        Both methods can converge at 100% match.
+
+
+
+
+            Below comes to the pct_matches above through a different thought process I had - but both thought processes led to that answer.
             Blast pct id?
             If you give blast: Query v Subject (below are fake used to convey small point)
             If you give blast: AAAAA v AAAAA: Identities = 5/5 (100%)
@@ -677,8 +824,8 @@ class SplitReadSamRecord(object):
             If you give blast: AAAA   v AAGAA: (del) Identities = 4/5 (80%)
             In general it is: number_matches / local_alignment_length
             ...where local_aln_length = n_match + n_mismatch + n_ins + n_del = M+I+D in cigar-speak
-            So technically one cannot 'exactly' get pct identity across whole read if there are H and S present... one would need to know how many MDI it would form.
-            But I do show a way to approximate it below b/c while pcr_identity as described above is great to talk about the
+            So technically one cannot 'exactly' get pct identity across whole read if there are H and S present in CIGAR... one would need to know how many MDI it would form.
+            But I do show a way to approximate it below b/c while pct_identity as described above is great to talk about the
                 aligned portions of a read, it is not fantastic for talking about the quality of the entire read.
             
             To ponder:
@@ -723,47 +870,197 @@ class SplitReadSamRecord(object):
                             = (n_match + n_mismatch + n_ins + n_del) - (n_mismatch + n_ins + n_del)
                             = n_match
                 pct_identity_including_clipped_regions = (total_alignment - total_distance)/total_alignment
+                pct matches in the alignments (with unused-clipped regions treated like mismatches)
             
+                NOTE:   This assumes split alignments are non-overlapping, which I have found they aren't (i.e. they do overlap some times, and not just at clipped parts).
+                        It is not super clear how to handle this scenario, but there are a few ways.
+                        1. Keep calculation as is.
+                            Keeping it as is somewhat gives the average over the overlapping sections - since it will normalize the matches in each to the length of each
+                            - however, I guess it technically gives more weight/influence to the overlapping sections to the overall sum(matches)/sum(alnlens).
+                        2. Identify the part of the read involved in both alignments - add the pct_match from each subregion and divide by 2 to get average.
+                        3. Identify the part of read involved - and take the one with lower/higher pct matches.
+
+                        #2 is clearly the ideal way... however, there is no quick way of knowing from NM and CIGAR, which Ms are matches and which are mismatches...
+                        Therefore #3 will have to do.
+                        Only a small % of read is involved in overlapping alignments anyway. Ones I checked <= 3.6% - though this could be a biased sample.
+
+
             
             As a proxy, I used to use:
-                (read_len-NM)/readlen
-            However, I guess I could do better as above.
+                (read_len-NM)/read_len
+                or
+                (read_len-total_distance)/read_len
+                I like this a little less than the complement (NM/read_len) b/c at least you can interpret NM/readlen as the number of
+                    problems in the alignment per base in the read.
+                It is unclear how to interpret (read_len-NM)/read_len to me,
+                although since they are complements, they are equivalently useful for ranking and such.
+                Perhaps it could be interpreted as the absolute minimum number of good bases in the read per bases in the read,
+                    whereas (total_alignment - total_distance)/total_alignment 
+                So it is like a conservative guess at how good the read is.
+
+            Correlation of different methods (using 55 aligned reads):
+            V1 = global method adding in unaligned bases
+            V2 = global method of scaling local sum to pct aligned bases
+            V3 = just the sum of locals (not accounting for unaligned portion of read)
+            V4 = proxy above
+                          V1        V2        V3        V4
+                V1 1.0000000 0.9994857 0.9051552 0.7084775
+                V2 0.9994857 1.0000000 0.8988643 0.7007634
+                V3 0.9051552 0.8988643 1.0000000 0.9352874
+                V4 0.7084775 0.7007634 0.9352874 1.0000000
+                
             
         '''
+        # RETURN:
+        # GLOBAL: 100 * (MDI - NM) / (MDI + n_unaligned)
+        # SUMLOCAL: 100 * (MDI - NM) / (MDI)
+        # SCALED_LOCAL: pct_aligned_bases * (MDI - NM) / (MDI) = 100 * A/(U+A) * (MDI-NM) / NM 
+        MDI = self.get_sum_MDI_alignment_lengths()
+        aln_only = 100.0 * (MDI - self.get_total_edit_dist()) / MDI
+        with_unaln = 100.0 * (MDI - self.get_total_edit_dist()) / (MDI + self.get_number_bases_in_read_not_aligned())
+        scaled_aln_only = self.get_pct_of_read_aligned() * (MDI - self.get_total_edit_dist()) / MDI
+        return with_unaln, scaled_aln_only, aln_only
+
+    def get_pct_identity_proxy(self):
+        ''' Proxy is "(read_len-NM)/read_len" as described above in pct_identity blurb.
+            This definitely seems to correlate with other pct_id estimates, but is less precise as explained in the pct_id blurb.
+            Around 50% of the time it seems to be global_pct_id** <= proxy <= local_pct_id
+                **obtained either by scaling to pct aligned bases or including unaligned bases in denom.
+            When I looked at 55 reads that had alignments, 49.1% of the time it was the relationshp above, 29.1% it was hgher than the local, 21.8% of the time it was lower than the globals.
+            As shown above, it has a correlation of 0.7 with the globals and 0.93 with local sum (using these 55 alignments).
+            Overall - I'd just use one of the more formalized and interpretable pct_alns from now on...
+                '''
+        return 100.0 * (self.get_read_length() - self.get_total_edit_dist()) / self.get_read_length()
+
+    def get_sum_MDI_alignment_lengths(self):
+        return sum( self.get_MDI_alignment_lengths() )
+
+    def get_total_edit_dist(self):
+        return sum(self.get_edit_dist_fields())
+    
+    def get_total_dist(self):
+        ''' as defined in get_pct_identity() blurb:
+                total dist = total edit dist + total unaligned (not used in any of the alignments)
+            Unaligned bases are effectively treated as mismatches.
+            Also - alignments that have overlaps (typically not a lot of overlap) will'''
+        return self.get_total_edit_dist() + self.get_number_bases_in_read_not_aligned()
+
+    def get_coords_along_read(self, indexes=[]):
+        ''' Assumes there alignments.
+            Gets list of start and end positions of alignments along the read.
+            Can return for any index or set of indexes given.
+            Default is to return for all.'''
+        assert self.has_alignments()
+        if not indexes:
+            indexes = range(self.get_num_aln())
+        l = []
+        for i in indexes:
+            start =  self.get_record(i).get_start_pos_on_read() 
+            end =  self.get_record(i).get_end_pos_on_read()
+            l.append( (start,end,i) )
+        return l
+
+    def get_per_base_align_status_for_read(self, indexes=[]):
+        ''' Reports CIGAR-like string pertaining to bases in the read regarding whether they are aligned or not, given a set of alignments.
+            For example, if there is a 1000 bp read where the inner 800 bp is aligned
+            and outer 100 bp on each side is not, return:
+                100U800A100U
+            Can also use on subset of indexes to obtain status of each bp given subset of alignments.
+
+            Current implementation assumes that reads are nearly perfectly partitioned in the splits.
+            That means it allows neighboring alignments to have overlap, but does not anticipate overlap
+            between further away alignments. This seems to hold for BWA (bwa mem).
+
+            Currently asserts that the sum of A+U should be the read length.
+            This should be True - the assertion will fire up if the code is wrong (or an unanticipated case is found).'''
+
+        ## Can be used on subsets of the alignments, but empty indexes does all and saves into a variable that is returned here if it already exists
+        if not indexes and self.alnstring is not None:
+            return self.alnstring
         
 
-    def get_num_aln(self):
-        ''' This is more accurately "number of sam records".
-            However, I left it as is, since the functions that use it will
-            typically be using it when 1+ sam records is an alignment.
-            This will report unaligned SAM records as 1 alignment.... so be careful to use with "has_alignments()"'''
-        if self.num_aln is None:
-            self.num_aln = len(self.records)
-        return self.num_aln
+        #initialize
+        alnstatus = ''
+        lengths = {'Total':0, 'Un':0, 'Aln':0}
 
-    def has_alignments(self):
-        ''' Looks for at least one record with an alignment.'''
-        for i in range(self.get_num_aln()):
-            if self.get_record(i).is_aligned():
-                return True
-        return False
+        coords = sorted( self.get_coords_along_read(indexes) )
+        if coords[0][0] != 1: ## Then there is clipping/unaligned stuff at beginning
+            unalnlen = coords[0][0] - 1
+            lengths['Total'] += unalnlen
+            lengths['Un'] += unalnlen
+            alnstatus += str(unalnlen)+'U'
+            unalnlen = 0
+        alnlen = coords[0][1]-coords[0][0] + 1
+        
+        #iterate
+        for i in range( 1, len(coords) ):
+            if coords[i][0] > coords[i-1][1]:
+                alnstatus += str(alnlen)+'A'
+                lengths['Total'] += alnlen
+                lengths['Aln'] += alnlen
+                alnlen = 0
+                unalnlen = (coords[i][0] - 1) - (coords[i-1][1] + 1) + 1
+                lengths['Total'] += unalnlen
+                lengths['Un'] += unalnlen
+                alnstatus += str(unalnlen)+'U'
+                unalnlen = 0
+                alnlen += coords[i][1]-coords[i][0] + 1
+                
+            elif coords[i][0] <= coords[i-1][1]:
+                alnlen += coords[i][1]-coords[i][0] + 1 - (coords[i-1][1]-coords[i][0]+1)
+                
+        #finalize
+        if alnlen > 0:
+            alnstatus += str(alnlen)+'A'
+            lengths['Total'] += alnlen
+            lengths['Aln'] += alnlen
+            alnlen = 0
+        rl = self.get_read_length()
+        if coords[-1][1] < rl:
+            unalnlen = rl - coords[-1][1]
+            lengths['Total'] += unalnlen
+            lengths['Un'] += unalnlen
+            alnstatus += str(unalnlen)+'U'
 
-    def has_only_records_that_are_aligned(self):
-        ''' This ensures all SAM records are for alignments - not unaligned reads.
-            This is essentially redundant with has_alignments() since it appears the possibilities for a SAM record are:
-                1. unaligned read
-                2. aligned read - only alignment
-                3. aligned read - 1 of N alignments'''
-        count = 0
-        for i in range(self.get_num_aln()):
-            if self.get_record(i).is_aligned():
-                count+=1
-        return self.get_num_aln() == count
+        ## ASSERT: require the U+A len (T for total U+A) to equal the read length!
+        assert rl == lengths['Total']
+        assert lengths['Total'] == lengths['Aln']+lengths['Un']
 
+        ## Can be used on subsets of the alignments, but empty indexes does all and saves into a variable that is returned here if it already exists
+        if not indexes and self.alnstring is None:
+            self.alnstring = alnstatus
+            self.alncounts = lengths
+        ## RETURN
+        return alnstatus
 
-    def get_record(self,index):
-        return self.records[index]
+    def get_number_bases_in_read_aligned(self):
+        if self.alncounts is None:
+            self.get_per_base_align_status_for_read()
+        return self.alncounts['Aln']
+
+    def get_number_bases_in_read_not_aligned(self):
+        if self.alncounts is None:
+            self.get_per_base_align_status_for_read()
+        return self.alncounts['Un']
+        
+
+    def get_pct_of_read_aligned(self):
+        ''' This is to offer a different perspective than the pct_id and stuff normalized to alignment lengths.
+            This tells one what percent of a read is involved in an alignment (single or multiple splits) regardless
+            of how many of those bases are in matches.'''
+        if self.pct_aln is None:
+             self.pct_aln = 100.0 * self.get_number_bases_in_read_aligned() / (self.get_number_bases_in_read_aligned() + self.get_number_bases_in_read_not_aligned() )
+        return self.pct_aln
     
+    def get_pct_of_read_not_aligned(self):
+        ''' This is to offer a different perspective than the pct_id and stuff normalized to alignment lengths.
+            This tells one what percent of a read is NOT involved in an alignment at all
+            -- e.g. only involved in hard/soft clipping.'''
+        if self.pct_unaln is None:
+             self.pct_unaln = 100.0 * self.get_number_bases_in_read_not_aligned() / (self.get_number_bases_in_read_aligned() + self.get_number_bases_in_read_not_aligned() )
+        return self.pct_unaln
+    
+
     def genomic_window_ovlps(self):
         ## Use pybedtools to find overlaps
         pass
@@ -1037,6 +1334,12 @@ class SplitReadSamRecord(object):
                     NOTE: 1.0 gives proportion while 1 gives 1 bp.'''
         '''1-based, closed.'''
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
+
+
+### TODO/TO-ADD:
+        ## to all labels, add % of read aligned: read.get_pct_of_read_aligned()
+        ## to all labels, add % identity of read: 
+        
         if not self.has_alignments():
             print -1
             return None ## No alignments, therefore no genomic window.
