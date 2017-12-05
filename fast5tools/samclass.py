@@ -1,6 +1,13 @@
-import os, sys, re, pybedtools, pandas
+import os, sys, re, pybedtools, pandas, operator
 from collections import defaultdict
 import numpy as np
+
+isthis = {'gt':operator.gt, 'ge':operator.ge, 'lt':operator.lt, 'le':operator.le, 'eq':operator.eq, 'ne':operator.ne} 
+
+def Is(a,op,b):
+    return isthis[op](a,b)
+
+
 
 class Sam(object):
     ''' Reproduce Same file with:
@@ -140,7 +147,9 @@ class SamRecord(object):
         self.parsed_aln['QUAL'] = aln[10]
         self.parsed_aln['EXTRA'] = ('\t').join( aln[11:] )
 
-
+    def string_from_parsed_alignment(self):
+        return ('\t').join( [ str(self.parsed_aln[k]) for k in self.get_sam_fields() ] )
+    
     def is_aligned(self):
         ## TODO - better definition?
         ''' This definition is useful for single-end/long reads - but not for PE reads.'''
@@ -200,20 +209,23 @@ class SamRecord(object):
     def get_extra_fields(self):
         return self.parsed_aln['EXTRA']
     
-    def string_from_parsed_alignment(self):
-        return ('\t').join( [ str(self.parsed_aln[k]) for k in self.get_sam_fields() ] )
 
 
-    def get_cigar_counts(self):
+    def get_cigar_counts(self, get_item=False):
         # if present as single '*', then CIGAR is unavailable
         # cigar chars are in 'MIDNSHP=X'
         # some ways to get seq and read lengths from CIGAR if not storing cigar dict
         #   self.seq_len = sum([int(e) for e in re.findall('(\d+)[MIS=X]', self.parsed_aln['CIGAR'])])
         #   self.read_len = sum([int(e) for e in re.findall('(\d+)[HMIS=X]', self.parsed_aln['CIGAR'])])
-        self.cigar = {"M":0, "I":0, "D":0, "N":0, "S":0, "H":0, "P":0, "=":0, "X":0}
-        for count,char in re.findall('(\d+)([MIDNSHP=X])', self.parsed_aln['CIGAR']):
-            self.cigar[char] += int(count)
-        return self.cigar
+        if self.cigar is None:
+            self.cigar = {"M":0, "I":0, "D":0, "N":0, "S":0, "H":0, "P":0, "=":0, "X":0}
+            for count,char in re.findall('(\d+)([MIDNSHP=X])', self.parsed_aln['CIGAR']):
+                self.cigar[char] += int(count)
+        if not get_item:
+            return self.cigar
+        else:
+            # expects item to be in MIDNSHP=X
+            return self.cigar[get_item]
 
     def get_num_cigar_matches_and_mismatches(self):
         assert self.uses_M() == True
@@ -333,6 +345,22 @@ class SamRecord(object):
         # Below: M - n_match = n_mis+n_match - n_match
         return self.cigar['M'] - self.get_num_matches_MDI_NM()
 
+
+##    def get_pct_identity_given_alignment(self):
+##        ''' Returns pct id of local alignment as BLAST:
+##                pct id  = 100.0 * n_match / (n_match + n_mismatch + n_ins + n_del)
+##                        = 100.0 * (((n_match + n_mismatch + n_ins + n_del) - (n_mismatch + n_ins + n_del)) / (n_match + n_mismatch + n_ins + n_del)
+##                        = 100.0 * (MDI - NM)/(MDI)
+##                '''
+##        if self.cigar is None: 
+##            self.get_cigar_counts()
+##        if self.uses_M():
+##            MDI = pass
+##        else:
+##            pass
+
+    def pos_field_is(self, op, b):
+        return Is(self.get_pos_field(), op, b)
 
     def update_pos_field(self, add=0, replace=None): ## example use: doubled ecoli genome for mapping over breakpoint; now want to subtract G_size from anything greater than G_size to put back on first copy
         assert add == 0 or replace is None
@@ -563,6 +591,8 @@ class SamRecord(object):
 
     def on_negative_strand(self):
         return self.reference_strand() < 0
+
+
 
 
 
@@ -811,6 +841,44 @@ class SplitReadSamRecord(object):
                         This seems to typically return a lower (but not by much) estimate than treating unaligned bases as all mismatches (or insertions).
                         Scaling is typically >99% the same number. Nonetheless, that would suggest scaling is ever so slightly more conservative.
                         Both methods can converge at 100% match.
+                        Some examples:
+                            Case1:
+                                100 bp read, 10 bp align with 10 matches, 90 bp do not align. EDIT=0 for alignment.
+                                Local pct identity = n_match/MDI = 10/10 = 100%
+                                Global pct identity for read
+                                        Using MDI+unaligned_bases method = n_match/(MDI+90) = 10/(10+90) = 10/100 = 0.1 (10%)
+                                        Using scaling method = (n_match/MDI) * aln/(aln+unaln) = 10/10 * 10/100 = 1*0.1 = 0.1 (10%)
+                            Case 2:
+                                100 bp read, 10 bp align with 5 matches, 5 mismatches, 90 bp do not align. EDIT=5 for alignment.
+                                Local pct identity = n_match/MDI = 5/10 = 50%
+                                Global pct identity for read
+                                        Using MDI+unaligned_bases method = n_match/(MDI+90) = 5/(5+5+90) = 5/100 = 0.05 (5%)
+                                        Using scaling method = (n_match/MDI) * aln/(aln+unaln) = 5/10 * 10/100 = 0.5*0.1 = 0.05 (5%)
+                            Case3:
+                                100 bp read, 15 bp align w/ 5 matches, 5 mismatches, 5 insertions, 5 deletions.
+                                85 bp do not align. EDIT = 15. MDI = 20
+                                Local pct identity = n_match/MDI = 5/20 = 25%
+                                Global pct identity for read
+                                        Using MDI+unaligned_bases method = n_match/(MDI+85) = 5/(20+85) = 5/105 = 0.04762 (4.762%)
+                                        Using scaling method = (n_match/MDI) * aln/(aln+unaln) = 5/20 * 15/100 = 0.25*0.15 = 0.0375 (3.75%)
+                                Scaling is more conservative b/c it is propagating information about deletions whereas MDI+unaln treats all unaligned
+                                    bases as mismatches or insertions.
+                                If one increases the number of deletions, MDI gets bigger while the proportion of read aligned stays the same.
+                                    10 deletions (MDI=25, a/total=15/100):
+                                        method1 = 5/(25+85) = 5/110 = 0.455
+                                        method2 = 5/25 * 15/100 = 0.2 * 0.15 = 0.03
+                                    15 deletions (MDI=30, a/total=15/100):
+                                        method1 = 5/(30+85) = 5/115 = 0.435
+                                        method2 = 5/30 * 15/100 = 5/30 * 0.15 = 0.025
+                                Meanwhile, if one increases number of matches, mismatches, or insertions, MDI gets bigger AND proportion of read aligned gets bigger.
+                                    10 insertions (MDI=25, a/total = 20/100)
+                                        method1 =
+                                        method2 =
+                                    15 insertions (MDI=30, a/total = 25/100)
+                                        method1 = 
+                                        method2 =
+                                        
+                                Do these methods converge when there are NO DELETIONS?
 
 
 
@@ -1365,6 +1433,11 @@ class SplitReadSamRecord(object):
                 print 2,1
                 #return the composite genomic window formed by overlapping genomic windows
                 identifier = "single_merged_window"
+
+
+                ## TODO: Add more to this label such as number alignments in merge... all on same strand, same order, etc....
+
+                
                 single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
                 return single_merged_window
             elif num_after_merge > 1:

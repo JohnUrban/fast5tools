@@ -86,21 +86,24 @@ def get_pct_identity_v_Q(sam):
 ##sam = Sam(args.sam)
 ##alignment_summary(sam)
 ##get_aln_pct_identity_v_Q(sam)
-
+##for read in sam:
+##    if read.get_pos_field() > 4641652:
+##        read.update_pos_field(add=-4641652)
+##    print read
 
 
 sam = SamSplitAlnAggregator(args.sam)
-####get_genomic_windows(sam)
+get_genomic_windows(sam)
 ##get_pct_identity_v_Q(sam)
 
 
 
-for read in sam:
+##for read in sam:
 ##    read.get_end_pos_on_read()
 ##    print "HERE", read.get_read_len(), read.get_start_pos_on_read(), read.get_end_pos_on_read()
 
-    if read.has_alignments():
-        pctid =  read.get_pct_identity()
-        print read.get_per_base_align_status_for_read(), read.get_number_bases_in_read_aligned(), read.get_number_bases_in_read_not_aligned(), read.get_pct_of_read_aligned(), read.get_pct_of_read_not_aligned(), pctid[0], pctid[1], pctid[2], read.get_pct_identity_proxy()
-    
+##    if read.has_alignments():
+##        pctid =  read.get_pct_identity()
+##        print read.get_per_base_align_status_for_read(), read.get_number_bases_in_read_aligned(), read.get_number_bases_in_read_not_aligned(), read.get_pct_of_read_aligned(), read.get_pct_of_read_not_aligned(), pctid[0], pctid[1], pctid[2], read.get_pct_identity_proxy()
+##    
 
