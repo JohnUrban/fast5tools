@@ -26,6 +26,7 @@ class Sam(object):
         self.PG = {}
         self.header_string = ''
         self.parse_header()
+
         
         
     def open(self, samfile):
@@ -735,6 +736,9 @@ class SplitReadSamRecord(object):
     def get_MDI_alignment_lengths(self):
         return [record.get_alignment_length_MDI() for record in self.records]
 
+    def get_list_of_num_cigar_deletions_from_ref(self):
+        return [record.get_num_cigar_deletions_from_ref() for record in self.records]
+    
     def get_num_aln(self):
         ''' This is more accurately "number of sam records".
             However, I left it as is, since the functions that use it will
@@ -864,21 +868,58 @@ class SplitReadSamRecord(object):
                                 Scaling is more conservative b/c it is propagating information about deletions whereas MDI+unaln treats all unaligned
                                     bases as mismatches or insertions.
                                 If one increases the number of deletions, MDI gets bigger while the proportion of read aligned stays the same.
-                                    10 deletions (MDI=25, a/total=15/100):
+                                    10 deletions (MDI=5+5+5+10=25, a/total=15/100 = M+I/total = 0.15):
                                         method1 = 5/(25+85) = 5/110 = 0.455
                                         method2 = 5/25 * 15/100 = 0.2 * 0.15 = 0.03
-                                    15 deletions (MDI=30, a/total=15/100):
+                                    15 deletions (MDI=5+5+5+15=30, a/total = M+I/total = 5+5+5 / 100 = 15/100):
                                         method1 = 5/(30+85) = 5/115 = 0.435
-                                        method2 = 5/30 * 15/100 = 5/30 * 0.15 = 0.025
+                                        method2 = 5/30 * 15/100 = 5/30 * 0.15 = 0.025 = 2.5%
                                 Meanwhile, if one increases number of matches, mismatches, or insertions, MDI gets bigger AND proportion of read aligned gets bigger.
-                                    10 insertions (MDI=25, a/total = 20/100)
-                                        method1 =
-                                        method2 =
-                                    15 insertions (MDI=30, a/total = 25/100)
-                                        method1 = 
-                                        method2 =
-                                        
-                                Do these methods converge when there are NO DELETIONS?
+                                    10 insertions (MDI=5+5+10+5=25, a/total = M+I/readlen = 5+5+10/100 = 20/100)
+                                        method1 = 5/(25+80) = 5/105 = 0.4762 (4.76%) ## same as above
+                                        method2 = 5/25 * 20/100 = 0.2 * 0.2 = 0.04
+                                    15 insertions (MDI=5+5+15+5=30, a/total = M+I/readlen = 5+5+15 = 25/100)
+                                        method1 = 5/(30+75) = 5/105 = 0.4762 (4.76%) ## same as above since unaligned are treated as insertions (or mismatches) meaning this just switches where the Is are counted
+                                        method2 = 5/30 * 25/100 = 5/30 * 0.25 = 0.04167 (4.167%)
+                                Note that for DELETIONS, having 5, 10, or 15 deletions affects both methods by bringing pct_id down.
+                                    However, for INSERTIONS, having 5, 10, or 15 insertions has no effect on resulting pct_id for METHOD_1.
+                                        This is b/c the unaligned bases are treated as insertions anyway, so they could be added to the I in MDI.
+                                    For METHOD_2, having more insertions in the aligned portion lowers the pct_id locally, and this is generalized out the read when scaled to aligned bases.
+                                        On some level, that feels more "Bayesian" -- we believe the pct_id is lower after seeing 15 insertions than we do after seeing 5....
+                                        So the scaling method seems to incorporate information about extent of deletions and insertions in the local alignment.
+                                        Another way to interpret it is in a 100 bp read with 25 aligned bases, the best score you can get 25/25 matches in local and is 25/100 = 0.25 for global...
+                                            If the local alignment has 100% identity, then it becomes 25/25 * 25/100 = 1*0.25 = 0.25
+                                                                                                    = pct_id_seen * max_pct_id_possible
+                                            It also converges on method1 here b/c having seen no indels, it is treating all unaligned bases as mismatches (or insertions)...
+                                        Wait -- let me look at this again:
+                                            Method2 insertions 5,10,15 gave pctids of: 3.75, 4.0, and 4.167.
+                                                Somehow the pctid is getting better with more insertions...
+                                            Do these two methods converge with higher levels of insertions? Likely so since all unaligned in method1 are treated as an insertion.
+                                            So if method 2 is converging up to method1 despite more error... is method1 better?
+                                            
+                            Case 4: Do these methods converge when there are NO DELETIONS?
+                                100 bp read, 15 bp align w/ 5 matches, 5 mismatches, 5 insertions, 0 deletions.
+                                85 bp do not align. EDIT = 15. MDI = 15
+                                Local pct identity = n_match/MDI = 5/15 = 33%
+                                Global pct identity for read
+                                        Using MDI+unaligned_bases method = n_match/(MDI+85) = 5/(15+85) = 5/100 = 0.05 (5%)
+                                        Using scaling method = (n_match/MDI) * aln/(aln+unaln) = 5/15 * 15/100 = 0.05 (5%)
+                                YES THEY DO....
+                                Toggle mismatches and insertions
+                                5 matches, 7 mismatches, 3 insertions, 0 deletions. MDI=15. aligned=15.
+                                    Local = 5/15 = 33%
+                                    Global1 = 5/(15+85) = 5% (does not change b/c insertions and mismatches treated same)
+                                    Global2 = 5/15 * 15/100 = 5% (does not change)
+                        A difference is definitely deletions....
+                        How to make them agree with deletions?
+                        Method 1 can be modified to be:
+                            n_match/(MDI + unaligned + unaligned*D/MDI)
+                            = n_match/(MDI + U*M/MDI + U*I/MDI + 2*U*D/MDI)
+                        In 55/55 cases, this brought the two methods closer together w/ avg distances going from 0.31 to 0.042.
+                        So -- overall, the methods differ in:
+                            1. Whether expected deletion rate is modeled into final answer.
+                            2. Whether observing more insertions (or mismatches) affects final answer.
+                                
 
 
 
@@ -984,10 +1025,23 @@ class SplitReadSamRecord(object):
         # SUMLOCAL: 100 * (MDI - NM) / (MDI)
         # SCALED_LOCAL: pct_aligned_bases * (MDI - NM) / (MDI) = 100 * A/(U+A) * (MDI-NM) / NM 
         MDI = self.get_sum_MDI_alignment_lengths()
-        aln_only = 100.0 * (MDI - self.get_total_edit_dist()) / MDI
-        with_unaln = 100.0 * (MDI - self.get_total_edit_dist()) / (MDI + self.get_number_bases_in_read_not_aligned())
-        scaled_aln_only = self.get_pct_of_read_aligned() * (MDI - self.get_total_edit_dist()) / MDI
-        return with_unaln, scaled_aln_only, aln_only
+        n_match = MDI - self.get_total_edit_dist()
+        U = self.get_number_bases_in_read_not_aligned()
+        MDIU = MDI + U
+        D = self.get_sum_cigar_deletions_from_ref()
+        M = sum([record.get_cigar_counts('M') for record in self.records])
+        I = sum([record.get_cigar_counts('I') for record in self.records])
+##        Ud = U - U*M/float(MDI) - U*I/float(MDI)
+        MDIUD = MDIU + U*D/float(MDI)
+        PROP_U = U*M/float(MDI) + U*I/float(MDI) + 2*U*D/float(MDI)
+        MDI_PROPU = MDI + PROP_U
+        aln_only = 100.0 * n_match / MDI
+        with_unaln = 100.0 * n_match / MDIU
+        scaled_aln_only = self.get_pct_of_read_aligned() * n_match / MDI
+        with_unaln_accounting_for_dels = 100.0 * n_match / MDIUD
+        alt = 100.0 * n_match / MDI_PROPU
+        return with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt
+        
 
     def get_pct_identity_proxy(self):
         ''' Proxy is "(read_len-NM)/read_len" as described above in pct_identity blurb.
@@ -1012,6 +1066,9 @@ class SplitReadSamRecord(object):
             Unaligned bases are effectively treated as mismatches.
             Also - alignments that have overlaps (typically not a lot of overlap) will'''
         return self.get_total_edit_dist() + self.get_number_bases_in_read_not_aligned()
+
+    def get_sum_cigar_deletions_from_ref(self):
+        return sum(self.get_list_of_num_cigar_deletions_from_ref())
 
     def get_coords_along_read(self, indexes=[]):
         ''' Assumes there alignments.
@@ -1409,13 +1466,13 @@ class SplitReadSamRecord(object):
         ## to all labels, add % identity of read: 
         
         if not self.has_alignments():
-            print -1
+##            print -1
             return None ## No alignments, therefore no genomic window.
         elif self.get_num_aln() == 1: ## although get_num_aln() will report 1 for unaligned SAM records, those are taken care of above.
-            print 0
+##            print 0
             return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier="single_alignment")
         elif self.get_num_aln() > 1:
-            print 1
+##            print 1
             genomic_windows = []
 ##            bedstr = ''
             for i in range(self.get_num_aln()):
@@ -1430,7 +1487,7 @@ class SplitReadSamRecord(object):
             gw_merge = self.merge(l=sorted_genomic_windows, d=merge_dist)
             num_after_merge = len(gw_merge)
             if num_after_merge == 1:
-                print 2,1
+##                print 2,1
                 #return the composite genomic window formed by overlapping genomic windows
                 identifier = "single_merged_window"
 
@@ -1441,7 +1498,7 @@ class SplitReadSamRecord(object):
                 single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
                 return single_merged_window
             elif num_after_merge > 1:
-                print 2,2
+##                print 2,2
                 # find majority
                 # if num_merge == self.get_num_aln(): then can use SamRecord objects for more info about majority alignment
                 # else: some merges occurred -- can find majority based on aln len -- can also dig into SamRecords if nec
@@ -1467,10 +1524,10 @@ class SplitReadSamRecord(object):
                 split_alignment_proportions = self.determine_window_proportions(split_alignments)
                 split_alignment_majority = self.determine_majority_window(split_alignment_proportions, majority, proportions_provided=True)
                 if split_alignment_majority:
-                    print 3,1
+##                    print 3,1
                     chosen_alignment_index = split_alignment_majority[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
                 else:
-                    print 3,2
+##                    print 3,2
                     chosen_alignment_index = self.determine_longest_window(split_alignments)[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
                 AS = self.get_record(chosen_alignment_index).get_AS_field()    
                 split_alignment_top2_ratio = self.determine_longest_window_ratio(split_alignment_proportions, proportions_provided=True)
@@ -1480,23 +1537,23 @@ class SplitReadSamRecord(object):
                 split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
                 chosen_alignment = genomic_windows[chosen_alignment_index]
                 if num_after_merge == self.get_num_aln():
-                    print 4,1
+##                    print 4,1
                     ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
                     ## is there a majority? Aln that makes up > X% of summed alignment length?
                     if split_alignment_majority:
-                        print 5,1
+##                        print 5,1
                         ## need to get genomic window around alignment for majority alignment
                         ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
 
                         identifier = 'majority_alignment|' +  split_alignment_label
                     else:
-                        print 5,2
+##                        print 5,2
                         ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
                         identifier = 'longest_alignment|' + split_alignment_label
                     chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
                     return chosen_alignment_genomic_window
                 else:
-                    print 6
+##                    print 6
                     # compare merged and single alns all at same time?
                     #is there a merge that exceeds the max align length?
                     #   gather information:
@@ -1511,7 +1568,7 @@ class SplitReadSamRecord(object):
                     merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
 
                     if merge_with_max_spanning_aln[0] is not None: ## (i,j): i = False when no valid merges, merge_idx when there is; j = span_len
-                        print 7,1
+##                        print 7,1
                         sam_idx_list = merge_idx_dict[merge_with_max_spanning_aln[0]]
                         same_order_as_read = self.alignments_ordered_like_read(sam_idx_list)
                         same_strand = (',').join( [str(e) for e in self.alignments_on_same_strand(sam_idx_list)] )
@@ -1523,27 +1580,27 @@ class SplitReadSamRecord(object):
                         sum_AS_gt_highest_AS = sum_AS > split_alignment_highest_AS
                         merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) 
                         if merge_with_max_spanning_aln[1] > longest_aln:
-                            print 8,1
+##                            print 8,1
                             chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
                             if split_alignment_majority:
-                                print 9,1
+##                                print 9,1
                                 identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label
                             else:
-                                print 9,2, merge_with_max_spanning_aln
+##                                print 9,2, merge_with_max_spanning_aln
                                 identifier = 'longest_merge_span_gt_longest_aln|' + merge_label + '|' + split_alignment_label
                         else:
-                            print 8,2
+##                            print 8,2
                             chosen_genomic_window = chosen_alignment
                             if split_alignment_majority:
-                                print 9,3
+##                                print 9,3
                                 identifier = 'longest_merge_span_lt_majority_aln|' + merge_label + '|' + split_alignment_label
                             else:
-                                print 9,4
+##                                print 9,4
                                 identifier = 'longest_merge_span_lt_longest_aln|' + merge_label + '|' + split_alignment_label
                         chosen_genomic_window = (chosen_genomic_window[0], chosen_genomic_window[1], chosen_genomic_window[2], identifier)
                         return chosen_genomic_window
                     else:
-                        print 7,2, 'same as', 4,1
+##                        print 7,2, 'same as', 4,1
                         ## REPEATED CODE BELOW....(repeated from above single_aln area)... can maybe have function?
                         ## No valid merge - choose from alignments
                         if split_alignment_majority:
