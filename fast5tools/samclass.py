@@ -1461,16 +1461,20 @@ class SplitReadSamRecord(object):
         '''In splitread class - can check for overlap among various genomic windows from split alns of same read.'''
 
 
-### TODO/TO-ADD:
-        ## to all labels, add % of read aligned: read.get_pct_of_read_aligned()
-        ## to all labels, add % identity of read: 
-        
+        if self.has_alignments():
+            alnstring = self.get_per_base_align_status_for_read()
+            pctaln = self.get_pct_of_read_aligned()
+            pctid = self.get_pct_identity()[0]
+            pctstr = 'pctid:' + str(pctid) + '|pctaln:' + str(pctaln) + '|alnstring:' + alnstring
         if not self.has_alignments():
 ##            print -1
             return None ## No alignments, therefore no genomic window.
         elif self.get_num_aln() == 1: ## although get_num_aln() will report 1 for unaligned SAM records, those are taken care of above.
 ##            print 0
-            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier="single_alignment")
+            AS = self.get_record(0).get_AS_field()
+            length = self.determine_window_length( self.get_record(0).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=0) )
+            identifier = 'single_alignment|numaln:' + str(self.get_num_aln()) + '|longest_aln:' + str(length) + '|AS:' + str(AS) + '|' + pctstr
+            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=identifier)
         elif self.get_num_aln() > 1:
 ##            print 1
             genomic_windows = []
@@ -1489,11 +1493,40 @@ class SplitReadSamRecord(object):
             if num_after_merge == 1:
 ##                print 2,1
                 #return the composite genomic window formed by overlapping genomic windows
-                identifier = "single_merged_window"
+                
+                #get aln information
+                split_alignments = []
+                for i in range(self.get_num_aln()):
+                    ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
+                    split_alignments.append( ref_coords )
+                split_aln_lengths = self.determine_window_lengths(split_alignments)
+                split_alignment_proportions = self.determine_window_proportions(split_alignments)
+                chosen_alignment_index = self.determine_longest_window(split_alignments)[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
+                AS = self.get_record(chosen_alignment_index).get_AS_field()    
+                split_alignment_top2_ratio = self.determine_longest_window_ratio(split_alignment_proportions, proportions_provided=True)
+                split_alignment_highest_AS = self.determine_highest_alignment_score()[0]
+                split_alignment_top2_AS_ratio = self.determine_highest_alignment_score_ratio()
+                longest_aln = split_aln_lengths[chosen_alignment_index]
+                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
+                chosen_alignment = genomic_windows[chosen_alignment_index]
+                
+                #get merge information
+                merge_idx_dict = self.get_indexes_from_merged_tuples(gw_merge)
+                merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
+                sam_idx_list = merge_idx_dict[merge_with_max_spanning_aln[0]]
+                same_order_as_read = self.alignments_ordered_like_read(sam_idx_list)
+                same_strand = (',').join( [str(e) for e in self.alignments_on_same_strand(sam_idx_list)] )
+                sum_aln = sum([split_aln_lengths[i] for i in sam_idx_list])
+                sum_aln_gt_longest = sum_aln > longest_aln
+                longest_in_merge = chosen_alignment_index in sam_idx_list
+                sum_AS = sum([self.get_record(i).get_AS_field() for i in sam_idx_list])
+                sum_AS_gt_longest_AS = sum_AS > AS
+                sum_AS_gt_highest_AS = sum_AS > split_alignment_highest_AS
+                merge_alnstring = self.get_per_base_align_status_for_read(indexes=sam_idx_list)
+                mergealnstr_sam_as_alnstr = merge_alnstring == alnstring
+                merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) + '|merge_alnstring:' + merge_alnstring + '|merge_alnstring_sam_as_alnstring:' +  str(mergealnstr_sam_as_alnstr)
 
-
-                ## TODO: Add more to this label such as number alignments in merge... all on same strand, same order, etc....
-
+                identifier = 'single_merged_window|numaln:' + str(self.get_num_aln()) + '|' +  merge_label + '|' + split_alignment_label + '|' + pctstr
                 
                 single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
                 return single_merged_window
@@ -1545,11 +1578,11 @@ class SplitReadSamRecord(object):
                         ## need to get genomic window around alignment for majority alignment
                         ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
 
-                        identifier = 'majority_alignment|' +  split_alignment_label
+                        identifier = 'majority_alignment|' +  split_alignment_label + '|' + pctstr
                     else:
 ##                        print 5,2
                         ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
-                        identifier = 'longest_alignment|' + split_alignment_label
+                        identifier = 'longest_alignment|' + split_alignment_label + '|' + pctstr
                     chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
                     return chosen_alignment_genomic_window
                 else:
@@ -1578,25 +1611,27 @@ class SplitReadSamRecord(object):
                         sum_AS = sum([self.get_record(i).get_AS_field() for i in sam_idx_list])
                         sum_AS_gt_longest_AS = sum_AS > AS
                         sum_AS_gt_highest_AS = sum_AS > split_alignment_highest_AS
-                        merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) 
+                        merge_alnstring = self.get_per_base_align_status_for_read(indexes=sam_idx_list)
+                        mergealnstr_sam_as_alnstr = merge_alnstring == alnstring
+                        merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) + '|merge_alnstring:' + merge_alnstring + '|merge_alnstring_sam_as_alnstring:' +  str(mergealnstr_sam_as_alnstr)
                         if merge_with_max_spanning_aln[1] > longest_aln:
 ##                            print 8,1
                             chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
                             if split_alignment_majority:
 ##                                print 9,1
-                                identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label
+                                identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                             else:
 ##                                print 9,2, merge_with_max_spanning_aln
-                                identifier = 'longest_merge_span_gt_longest_aln|' + merge_label + '|' + split_alignment_label
+                                identifier = 'longest_merge_span_gt_longest_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                         else:
 ##                            print 8,2
                             chosen_genomic_window = chosen_alignment
                             if split_alignment_majority:
 ##                                print 9,3
-                                identifier = 'longest_merge_span_lt_majority_aln|' + merge_label + '|' + split_alignment_label
+                                identifier = 'longest_merge_span_lt_majority_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                             else:
 ##                                print 9,4
-                                identifier = 'longest_merge_span_lt_longest_aln|' + merge_label + '|' + split_alignment_label
+                                identifier = 'longest_merge_span_lt_longest_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                         chosen_genomic_window = (chosen_genomic_window[0], chosen_genomic_window[1], chosen_genomic_window[2], identifier)
                         return chosen_genomic_window
                     else:
