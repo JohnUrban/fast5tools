@@ -1556,7 +1556,7 @@ class SplitReadSamRecord(object):
                 split_aln_lengths = self.determine_window_lengths(split_alignments)
                 split_alignment_proportions = self.determine_window_proportions(split_alignments)
                 split_alignment_majority = self.determine_majority_window(split_alignment_proportions, majority, proportions_provided=True)
-                if split_alignment_majority:
+                if split_alignment_majority is not False:
 ##                    print 3,1
                     chosen_alignment_index = split_alignment_majority[0] ## FOR NOW JUST TAKE FIRST IF MORE THAN ONE (should be rare)
                 else:
@@ -1573,7 +1573,7 @@ class SplitReadSamRecord(object):
 ##                    print 4,1
                     ## nothing merged in above conditions -- meaning alignments are relatively far away from each other
                     ## is there a majority? Aln that makes up > X% of summed alignment length?
-                    if split_alignment_majority:
+                    if split_alignment_majority is not False:
 ##                        print 5,1
                         ## need to get genomic window around alignment for majority alignment
                         ## these types of genomic windows were obtained above in genomic_windows -- not genomic_alignments
@@ -1617,7 +1617,7 @@ class SplitReadSamRecord(object):
                         if merge_with_max_spanning_aln[1] > longest_aln:
 ##                            print 8,1
                             chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
-                            if split_alignment_majority:
+                            if split_alignment_majority is not False:
 ##                                print 9,1
                                 identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                             else:
@@ -1626,7 +1626,7 @@ class SplitReadSamRecord(object):
                         else:
 ##                            print 8,2
                             chosen_genomic_window = chosen_alignment
-                            if split_alignment_majority:
+                            if split_alignment_majority is not False:
 ##                                print 9,3
                                 identifier = 'longest_merge_span_lt_majority_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
                             else:
@@ -1638,7 +1638,7 @@ class SplitReadSamRecord(object):
 ##                        print 7,2, 'same as', 4,1
                         ## REPEATED CODE BELOW....(repeated from above single_aln area)... can maybe have function?
                         ## No valid merge - choose from alignments
-                        if split_alignment_majority:
+                        if split_alignment_majority is not False:
                             ## need to get genomic window around alignment for majority alignment
                             identifier = 'majority_alignment|' +  split_alignment_label
                         else:
