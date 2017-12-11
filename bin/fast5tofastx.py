@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 
 import h5py, os, sys
 import cStringIO as StringIO
@@ -115,20 +115,25 @@ legalouts += ("fasta_readstatsname", "fasta_readstatsname_with_abspath", "fasta_
 legalouts += ("fastq_readstatsname", "fastq_readstatsname_with_abspath", "fastq_readstatsname_with_filename")
 legalouts += ("qual_readstatsname", "qual_readstatsname_with_abspath", "qual_readstatsname_with_filename")
 assert args.outtype in legalouts
-assert args.readtype[0] in "tc2maM"
-if args.readtype[0] == "t":
-    args.readtype = "template"
-elif args.readtype[0] == "c":
-    args.readtype = "complement"
-elif args.readtype[0] == "2":
-    args.readtype = "2d"
-elif args.readtype[0] == "m":
-    args.readtype = "molecule"
-elif args.readtype[0] == "a":
-    args.readtype = "all"
-elif args.readtype[0] == "M":
-    args.readtype = "MoleQual"
 
+
+
+
+## PUTTING IN f5ops as assert_readtype() AND replacing here with assert_readtype() -- 12/8/17 -- if it still works, delete this
+##assert args.readtype[0] in "tc2maM"
+##if args.readtype[0] == "t":
+##    args.readtype = "template"
+##elif args.readtype[0] == "c":
+##    args.readtype = "complement"
+##elif args.readtype[0] == "2":
+##    args.readtype = "2d"
+##elif args.readtype[0] == "m":
+##    args.readtype = "molecule"
+##elif args.readtype[0] == "a":
+##    args.readtype = "all"
+##elif args.readtype[0] == "M":
+##    args.readtype = "MoleQual"
+args.readtype = assert_readtype(args.readtype, legaloptions="tc2maM")
 
 #################################################
 ### uses output functions from f5ops.py
@@ -142,25 +147,26 @@ elif args.readtype[0] == "M":
 ## fast5tofastx specific "output" functions
 #################################################
 
-def details(f5, readtype):
-    readstats = []
-    readstats.append( f5._get_pore_info_name(readtype) )
-    readstats.append( f5.get_seq_len(readtype) )
-    readstats.append( f5.get_mean_qscore(readtype) )
-    readstats.append( f5.get_num_events(readtype) )
-    try:
-        readstats.append( f5.get_num_called_events(readtype) )
-    except:
-        readstats.append("-")
-    try:
-        readstats.append( f5.get_num_skips(readtype) )
-    except:
-        readstats.append("-")
-    try:
-        readstats.append( f5.get_num_stays(readtype) )
-    except:
-        readstats.append("-")        
-    return ("\t").join([str(e) for e in readstats])
+## PUTTING IN f5ops -- 12/8/17 -- if it still works, delete this
+##def details(f5, readtype):
+##    readstats = []
+##    readstats.append( f5._get_pore_info_name(readtype) )
+##    readstats.append( f5.get_seq_len(readtype) )
+##    readstats.append( f5.get_mean_qscore(readtype) )
+##    readstats.append( f5.get_num_events(readtype) )
+##    try:
+##        readstats.append( f5.get_num_called_events(readtype) )
+##    except:
+##        readstats.append("-")
+##    try:
+##        readstats.append( f5.get_num_skips(readtype) )
+##    except:
+##        readstats.append("-")
+##    try:
+##        readstats.append( f5.get_num_stays(readtype) )
+##    except:
+##        readstats.append("-")        
+##    return ("\t").join([str(e) for e in readstats])
 
 
 
@@ -169,83 +175,85 @@ def details(f5, readtype):
 ####### argument processing functions ###########
 #################################################
 
-def get_fast5tofastx_fxns(args):
-    ### get outtype fxn ###
-    if args.outtype == "fasta":
-        output = fasta
-    elif args.outtype == "fastq":
-        output = fastq
-    elif args.outtype == "qual":
-        output = qual
-    elif args.outtype == "intqual":
-        output = intqual
-    elif args.outtype == "details":
-        output = details
-    elif args.outtype == "falcon" or args.outtype == "oldfalcon":
-        output = oldfalcon
-    elif args.outtype == "newfalcon":
-        output = newfalcon
-    elif args.outtype == "fasta_with_abspath":
-        output = fasta_with_abspath
-    elif args.outtype == "fasta_only_abspath":
-        output = fasta_only_abspath
-    elif args.outtype == "fastq_with_abspath":
-        output = fastq_with_abspath
-    elif args.outtype == "fastq_only_abspath":
-        output = fastq_only_abspath
-    elif args.outtype == "qual_with_abspath":
-        output = qual_with_abspath
-    elif args.outtype == "qual_only_abspath":
-        output = qual_only_abspath
-    #
-    elif args.outtype == "fasta_with_filename":
-        output = fasta_with_filename
-    elif args.outtype == "fasta_only_filename":
-        output = fasta_only_filename
-    elif args.outtype == "fastq_with_filename":
-        output = fastq_with_filename
-    elif args.outtype == "fastq_only_filename":
-        output = fastq_only_filename
-    elif args.outtype == "qual_with_filename":
-        output = qual_with_filename
-    elif args.outtype == "qual_only_filename":
-        output = qual_only_filename
-    #
-    elif args.outtype == "fasta_readstatsname":
-        output = fasta_readstatsname
-    elif args.outtype == "fasta_readstatsname_with_abspath":
-        output = fasta_readstatsname_with_abspath
-    elif args.outtype == "fasta_readstatsname_with_filename":
-        output = fasta_readstatsname_with_filename
-        
-    elif args.outtype == "fastq_readstatsname":
-        output = fastq_readstatsname
-    elif args.outtype == "fastq_readstatsname_with_abspath":
-        output = fastq_readstatsname_with_abspath
-    elif args.outtype == "fastq_readstatsname_with_filename":
-        output = fastq_readstatsname_with_filename
-        
-    elif args.outtype == "qual_readstatsname":
-        output = qual_readstatsname
-    elif args.outtype == "qual_readstatsname_with_abspath":
-        output = qual_readstatsname_with_abspath
-    elif args.outtype == "qual_readstatsname_with_filename":
-        output = qual_readstatsname_with_filename
-        
-    ### get readtype fxn ###
-    if args.readtype == "template":
-        getread = get_template_read
-    elif args.readtype == "complement":
-        getread = get_complement_read
-    elif args.readtype == "2d":
-        getread = get_2d_read
-    elif args.readtype == "molecule":
-        getread = get_molecule_read
-    elif args.readtype == "all":
-        getread = get_all_reads
-    elif args.readtype == "MoleQual":
-        getread = get_molequal_read
-    return output, getread
+
+## PUTTING IN f5ops -- 12/8/17 -- if it still works, delete this
+##def get_fast5tofastx_fxns(args):
+##    ### get outtype fxn ###
+##    if args.outtype == "fasta":
+##        output = fasta
+##    elif args.outtype == "fastq":
+##        output = fastq
+##    elif args.outtype == "qual":
+##        output = qual
+##    elif args.outtype == "intqual":
+##        output = intqual
+##    elif args.outtype == "details":
+##        output = details
+##    elif args.outtype == "falcon" or args.outtype == "oldfalcon":
+##        output = oldfalcon
+##    elif args.outtype == "newfalcon":
+##        output = newfalcon
+##    elif args.outtype == "fasta_with_abspath":
+##        output = fasta_with_abspath
+##    elif args.outtype == "fasta_only_abspath":
+##        output = fasta_only_abspath
+##    elif args.outtype == "fastq_with_abspath":
+##        output = fastq_with_abspath
+##    elif args.outtype == "fastq_only_abspath":
+##        output = fastq_only_abspath
+##    elif args.outtype == "qual_with_abspath":
+##        output = qual_with_abspath
+##    elif args.outtype == "qual_only_abspath":
+##        output = qual_only_abspath
+##    #
+##    elif args.outtype == "fasta_with_filename":
+##        output = fasta_with_filename
+##    elif args.outtype == "fasta_only_filename":
+##        output = fasta_only_filename
+##    elif args.outtype == "fastq_with_filename":
+##        output = fastq_with_filename
+##    elif args.outtype == "fastq_only_filename":
+##        output = fastq_only_filename
+##    elif args.outtype == "qual_with_filename":
+##        output = qual_with_filename
+##    elif args.outtype == "qual_only_filename":
+##        output = qual_only_filename
+##    #
+##    elif args.outtype == "fasta_readstatsname":
+##        output = fasta_readstatsname
+##    elif args.outtype == "fasta_readstatsname_with_abspath":
+##        output = fasta_readstatsname_with_abspath
+##    elif args.outtype == "fasta_readstatsname_with_filename":
+##        output = fasta_readstatsname_with_filename
+##        
+##    elif args.outtype == "fastq_readstatsname":
+##        output = fastq_readstatsname
+##    elif args.outtype == "fastq_readstatsname_with_abspath":
+##        output = fastq_readstatsname_with_abspath
+##    elif args.outtype == "fastq_readstatsname_with_filename":
+##        output = fastq_readstatsname_with_filename
+##        
+##    elif args.outtype == "qual_readstatsname":
+##        output = qual_readstatsname
+##    elif args.outtype == "qual_readstatsname_with_abspath":
+##        output = qual_readstatsname_with_abspath
+##    elif args.outtype == "qual_readstatsname_with_filename":
+##        output = qual_readstatsname_with_filename
+##        
+##    ### get readtype fxn ###
+##    if args.readtype == "template":
+##        getread = get_template_read
+##    elif args.readtype == "complement":
+##        getread = get_complement_read
+##    elif args.readtype == "2d":
+##        getread = get_2d_read
+##    elif args.readtype == "molecule":
+##        getread = get_molecule_read
+##    elif args.readtype == "all":
+##        getread = get_all_reads
+##    elif args.readtype == "MoleQual":
+##        getread = get_molequal_read
+##    return output, getread
 
 
 
@@ -257,8 +265,7 @@ def get_fast5tofastx_fxns(args):
 #################################################
 
 if __name__ == "__main__":
-    output, getread = get_fast5tofastx_fxns(args)
-
+    output, getread = get_fast5tofastx_fxns(args.outtype, args.readtype)
     samflag=""
     if args.samflag:
         samflag = "F5:Z:"

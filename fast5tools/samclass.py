@@ -733,11 +733,33 @@ class SplitReadSamRecord(object):
     def get_edit_dist_fields(self):
         return [record.get_edit_dist_field() for record in self.records]
 
+    def get_SEQ_fields(self):
+        return [record.get_SEQ_field() for record in self.records]
+
+    def get_read_SEQ(self):
+        ''' For 1 alignment, the read seq will typicall be there.
+            For multiple alignments, sometimes the SEQ is clipped (with H) or not shown in secondary alignments.
+            This attempts to find the longest SEQ that is ALSO the expected length.'''
+        seqs = self.get_SEQ_fields()
+        maxlen = 0
+        keepseq = ''
+        for seq in seqs:
+            seqlen = len(seq)
+            if seqlen > maxlen:
+                maxlen = seqlen
+                keepseq = seq
+        assert maxlen == self.get_read_length():
+        return keepseq
+
+                
+    
     def get_MDI_alignment_lengths(self):
         return [record.get_alignment_length_MDI() for record in self.records]
 
     def get_list_of_num_cigar_deletions_from_ref(self):
         return [record.get_num_cigar_deletions_from_ref() for record in self.records]
+
+
     
     def get_num_aln(self):
         ''' This is more accurately "number of sam records".

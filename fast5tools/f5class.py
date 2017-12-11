@@ -775,7 +775,7 @@ class Fast5(object):
     def get_read_stats_name_with_filebasename(self, readtype):
         return self.get_read_stats_name(readtype)+"|filename:"+self.filebasename
 
-    def _get_fastx_name_and_comments(self,name=False,comments=False):
+    def _get_fastx_name_and_comments(self, readtype, name=False,comments=False):
         if not name:
             name = self.get_pore_info_name(readtype)
         if not comments:
@@ -789,7 +789,7 @@ class Fast5(object):
         # Thus all extra fastq fxns below can be replicated by providing the appropriate name here
         # They will be kept as conveniences.
         # This new approach will allow much much mor eflexibility in the future.
-        name, comments = self._get_fastx_name_and_comments(name, comments)
+        name, comments = self._get_fastx_name_and_comments(readtype, name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
             return '\n'.join(['@'+name+comments, self.seq[readtype], self.fq_sep[readtype], self.quals[readtype]])
@@ -810,7 +810,7 @@ class Fast5(object):
     
     def get_fasta(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
-        name, comments = self._get_fastx_name_and_comments(name, comments)
+        name, comments = self._get_fastx_name_and_comments(readtype, name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
             return '\n'.join(['>'+name+comments, self.seq[readtype]])
@@ -833,7 +833,7 @@ class Fast5(object):
 
     def get_quals(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
-        name, comments = self._get_fastx_name_and_comments(name, comments)
+        name, comments = self._get_fastx_name_and_comments(readtype, name, comments)
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
             return '\n'.join(['>'+name+comments, self.quals[readtype]])
