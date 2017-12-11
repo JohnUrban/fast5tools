@@ -7,3 +7,4 @@ gen_fastx.sh
 gen_table.sh
 build/*
 dist/*
+stats.del*
