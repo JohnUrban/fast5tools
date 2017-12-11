@@ -158,6 +158,9 @@ parser.add_argument('-a', '--abspath', action='store_true', default=False, help=
 Using this option replaces that default with absolute path of their location.
 Note: this works best if the fast5s are located in sub-directories as per python os.path.abspath limitations.''')
 
+parser.add_argument('--outfile', type=str, default=False, help='''Default is to print to stdout. This will redirect into a file.''')
+
+
 
 parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
 The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
@@ -193,6 +196,12 @@ args.readtype = assert_readtype(args.readtype, legaloptions="tc2")
 #################################################
 
 if __name__ == "__main__":
+    ## print to stdout?
+    if not args.outfile:
+        OUT = sys.stdout
+    else:
+        OUT = open(args.outfile, 'w')
+        
     ## For now, this is controlled to grab the fastq with only the filename
     output = get_fast5tofastx_output_fxn('fastq_only_filename')
     getread = get_fast5tofastx_readtype_fxn(args.readtype)
@@ -287,7 +296,8 @@ if __name__ == "__main__":
     if args.header:
         if not args.nohash:
             header[0] = '#'+header[0]
-        print ('\t').join(header)
+        OUT.write( ('\t').join(header) + '\n' )
+
 
     # execute for loop
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
@@ -327,7 +337,7 @@ if __name__ == "__main__":
                         revaln2 = [str(revans2[i]) for i in get]
                         
                 out = ('\t').join( readname + aln1 + aln2 + revaln1 + revaln2 + comments + seq + quals)
-                print out
+                OUT.write( out + '\n' )
                 
                 
                 
