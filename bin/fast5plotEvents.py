@@ -51,7 +51,7 @@ parser.add_argument('-r', '--readtype', type=str, default='input',
                     help='''Specify: template, complement, or input. Default: input.''')
 
 parser.add_argument('-p', '--plottype', type=str, default='scatter',
-                    help='''Specify: scatter, ....  Default: scatter.''')
+                    help='''Specify: scatter, line, ....  Default: scatter.''')
 
 parser.add_argument('-a', '--adapters', action='store_true', default=False,
                     help='''Highlight adapter sequences. Default: False.''')

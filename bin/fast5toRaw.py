@@ -36,14 +36,34 @@ If you'd like a single-row table instead, use this option.
 Use this option in conjunction with -d/--delimiter to determine the delimiter between datapoints.
 The default delimiter is a space.''')
 
-parser.add_argument('-d', '--delimiter', type=str, default=" ", help='''Only meaningful when used with -s/--singleline.
+parser.add_argument('-d', '--delimiter', type=str, default=" ", help='''Only meaningful when used with -s/--singleline or -S/--segmented.
 Default is a space. Write the word "tab" if you want tabs. Otherwise, whatever string is provided is used.''')
+
+parser.add_argument('-S', '--segmented', action='store_true', default=False, help='''The default output is one data point per line like a single-column table.
+If you'd like the data to be segmented as it is in the events.
+It will be one event per line.''')
+
+parser.add_argument('-E', '--eventdelimiter', type=str, default="\n", help='''Only meaningful when used with -S/--segmented.
+Default is a newline. Write the word "tab" if you want tabs. Otherwise, whatever string is provided is used.''')
+
+parser.add_argument('-N', '--noclips', action='store_true', default=False, help='''Only meaningful when used with -S/--segmented.
+Raw data often has 5' and or 3' datapoints that are not part of events.
+These are automatically included as first and last line (if they exist).
+This says not to include them.''')
+
+parser.add_argument('-x', '--eventstats', action='store_true', default=False, help='''
+Will give Event number, mean, stdv, start, length on raw signal -- segmented according to events.
+Useful to spot check events....''')
+
+parser.add_argument('-M', '--mediannorm', action='store_true', default=False, help='''
+Median normalize the signal before returning it or operating on it....
+Each data point = 100*dp/median''')
 
 parser.add_argument('-o', '--outdir', type=str, default="",
                     help = '''If single fast5 specified, it will be reported to stdout.
 If multiple fast5s are specified, they will be saved to files in the working dir by default.
 This flag allows you to specify a different output directory.
-Filenames will be the the name of the fast5 file with .events.txt appended.''')
+Filenames will be the the name of the fast5 file with .rawsignal.txt appended.''')
 
 parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
 The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
@@ -69,7 +89,7 @@ if args.outdir:
     if args.outdir[-1] != "/":
         args.outdir += "/"
 
-if not args.singleline:
+if not args.singleline and not args.segmented:
     delimiter = "\n"
 else:
     if args.delimiter == 'tab':
@@ -77,6 +97,12 @@ else:
     else:
         delimiter = args.delimiter
 
+if args.eventdelimiter == 'tab':
+    eventdelim = '\t'
+else:
+    eventdelim = args.eventdelimiter
+
+clips = not args.noclips
 
             
 #################################################
@@ -85,14 +111,35 @@ else:
 
 if __name__ == "__main__":
     f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
-    if len(f5list) == 1: ## if only one f5, print to stdout
-        for f5 in f5list:
-            print f5.get_raw_signal_string(delimiter)
-    elif len(f5list) > 1: ## if more than one, print each f5 to own text file
-        for f5 in f5list:
-            out = open(args.outdir + f5.filebasename + "." + args.readtype + ".rawsignal.txt", 'w')
-            out.write(f5.get_raw_signal_string(delimiter))
-            out.close()
+
+    if args.segmented:
+        if len(f5list) == 1: ## if only one f5, print to stdout
+            for f5 in f5list:
+                print f5.get_segmented_raw_signal_string(includeclips=clips, datadelim=delimiter, eventdelim=eventdelim, readtype='template', median_normalized=args.mediannorm)
+        elif len(f5list) > 1: ## if more than one, print each f5 to own text file
+            for f5 in f5list:
+                out = open(args.outdir + f5.filebasename + "." + args.readtype + ".rawsignal.txt", 'w')
+                out.write(f5.get_segmented_raw_signal_string(includeclips=clips, datadelim=datadelim, eventdelim=delimiter, readtype='template', median_normalized=args.mediannorm))
+                out.close()
+    elif args.eventstats:
+        if len(f5list) == 1: ## if only one f5, print to stdout
+            for f5 in f5list:
+                print f5.get_segmented_raw_signal_stats_string(includeclips=clips, readtype='template', median_normalized=args.mediannorm)
+        elif len(f5list) > 1: ## if more than one, print each f5 to own text file
+            for f5 in f5list:
+                out = open(args.outdir + f5.filebasename + "." + args.readtype + ".rawsignal.txt", 'w')
+                out.write('')
+                out.close()
+    else:
+        if len(f5list) == 1: ## if only one f5, print to stdout
+            for f5 in f5list:
+                print f5.get_raw_signal_string(delimiter, median_normalized=args.mediannorm)
+        elif len(f5list) > 1: ## if more than one, print each f5 to own text file
+            for f5 in f5list:
+                out = open(args.outdir + f5.filebasename + "." + args.readtype + ".rawsignal.txt", 'w')
+                out.write(f5.get_raw_signal_string(delimiter, median_normalized=args.mediannorm))
+                out.close()
+                
 
 
 

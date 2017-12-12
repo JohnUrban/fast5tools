@@ -6,6 +6,7 @@ import cStringIO as StringIO
 from Bio import SeqIO
 from glob import glob
 from random import randint
+import numpy as np
 
 #logging
 import logging
@@ -982,6 +983,13 @@ class Fast5(object):
     def get_event_start_times(self, readtype):
         return self.f5[self._get_location_path(readtype,"Events")]["start"]
 
+    def get_event_raw_starts(self, readtype):
+        ''' Same as get_event_start_times. However, in newer files where raw data is provided,
+            "start" is literally the data point it starts on...
+            In HDFView I can see that datapoints start at 0 and end at length-1.
+            i.e. python indexing'''
+        return self.f5[self._get_location_path(readtype,"Events")]["start"]
+
     def get_event_flags(self): ## only present in non-basecalled files and seems to have shown up recently (e.g. first half of 2016)
         try:
             return self.f5[self._get_location_path(readtype="input",dataset="Events")]["flags"]
@@ -1083,11 +1091,16 @@ class Fast5(object):
         RAW = self.get_raw_path() + '/Signal/'
         return RAW
 
-    def get_raw_signal(self):
-        return self.f5[self.get_raw_signal_path()][()]
+    def get_raw_signal(self, median_normalized=False, scale=100.0):
+        if median_normalized:
+            raw = self.f5[self.get_raw_signal_path()][()]
+            median = np.median(raw)
+            return scale*raw/median
+        else:
+            return self.f5[self.get_raw_signal_path()][()]
     
-    def get_raw_signal_string(self, delimiter='\n'):
-        return (delimiter).join([str(e) for e in self.get_raw_signal()])
+    def get_raw_signal_string(self, delimiter='\n', median_normalized=False):
+        return (delimiter).join([str(e) for e in self.get_raw_signal(median_normalized)])
 
 
     def get_raw_attribute(self, attr):
@@ -1113,6 +1126,85 @@ class Fast5(object):
     def get_raw_start_time(self):
         return self.get_raw_attribute('start_time')
 
+    def get_segmented_raw_signal(self, readtype='template', median_normalized=False):
+        ''' Segments signal according to events.'''
+        raw = self.get_raw_signal(median_normalized)
+        events = self.get_events_dict(readtype) ## 12/12/17 For now with 1D reads, this is all that makes sense
+        rawseg = {}
+        rawseg['5primeclip'] = raw[:events['start'][0]]
+        sumlen = events['start'][0]
+        for i in range(len(events['start'])):
+            start = events['start'][i]
+            end = events['start'][i] + events['length'][i]
+            sumlen += end-start
+            rawseg[i] = raw[start:end]
+        try:
+            rawseg['3primeclip'] = raw[end:]
+        except:
+            rawseg['3primeclip'] = np.array([])
+        return rawseg
+
+    def get_segmented_raw_signal_string(self, includeclips=True, datadelim=' ', eventdelim='\n', readtype='template', median_normalized=False):
+        rawseg = self.get_segmented_raw_signal(readtype, median_normalized)
+        rawstring = ''
+        #add 5'?
+        if includeclips and rawseg['5primeclip'].any():
+            rawstring += (datadelim).join( [str(e) for e in rawseg['5primeclip']] ) + eventdelim
+        #get event-parsed raw
+        for i in range(len(rawseg.keys())-2-1): #-2 b/c 5primeclip and 3primeclip; -1 to avoid eventdelim after last one
+            rawstring += (datadelim).join( [str(e) for e in rawseg[i]] ) + eventdelim
+        #add last event w/o eventdelim
+        i+=1
+        rawstring += (datadelim).join( [str(e) for e in rawseg[i]] )
+        #add 3' ?
+        if includeclips and rawseg['3primeclip'].any():
+            rawstring +=  eventdelim
+            rawstring += (datadelim).join( [str(e) for e in rawseg['3primeclip']] )
+        return rawstring
+
+    def get_event_from_raw_signal(self, start, raw, name=None):
+        ''' start is calculated elsewhere
+            raw is slice of raw signal -- numpy array
+            name is optional'''
+        mean = raw.mean()
+        stdv = raw.std()
+        length = len(raw)
+        if name is not None:
+            return (name, mean, stdv, start, length)
+        else:
+            return (mean, stdv, start, length)
+
+    def get_segmented_raw_signal_stats(self, includeclips=True, readtype='template', median_normalized=False):
+##        print ('\n').join([str(e) for e in 100.0*self.get_raw_signal()/np.median(self.get_raw_signal())])
+        rawseg = self.get_segmented_raw_signal(readtype, median_normalized)
+        rawstats = []
+        sumlen = 0
+        #add 5'?
+        if includeclips and rawseg['5primeclip'].any():
+            event = self.get_event_from_raw_signal(start=0, raw=rawseg['5primeclip'], name='5primeclip')
+            rawstats.append( event )
+            sumlen += event[4]
+        #get event-parsed raw
+        for i in range(len(rawseg.keys())-2): #-2 b/c 5primeclip and 3primeclip
+            event = self.get_event_from_raw_signal(start=sumlen, raw=rawseg[i], name=i)
+            rawstats.append( event )
+            sumlen += event[4]
+        #add 3' ?
+        if includeclips and rawseg['3primeclip'].any():
+            event = self.get_event_from_raw_signal(start=sumlen, raw=rawseg['3primeclip'], name='3primeclip')
+            rawstats.append( event )
+            sumlen += event[4]
+##        assert sumlen == self.get_raw_duration()
+        assert sumlen == self.get_raw_duration()
+        return rawstats
+                
+    def get_segmented_raw_signal_stats_string(self, includeclips=True, readtype='template', median_normalized=False):
+        eventstr = ''
+        for event in self.get_segmented_raw_signal_stats(includeclips, readtype, median_normalized):
+           eventstr += ('\t').join([str(e) for e in event]) + '\n'
+        return eventstr.rstrip()
+
+        
     
         
         
