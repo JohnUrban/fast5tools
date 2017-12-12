@@ -748,7 +748,7 @@ class SplitReadSamRecord(object):
             if seqlen > maxlen:
                 maxlen = seqlen
                 keepseq = seq
-        assert maxlen == self.get_read_length():
+        assert maxlen == self.get_read_length()
         return keepseq
 
                 
