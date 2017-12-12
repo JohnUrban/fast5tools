@@ -31,6 +31,14 @@ Assumes all fast5 files have '.fast5' extension.
 If inside dir of dirs with .fast5 files, then can just do "*" to get all files from all dirs.''')
 
 
+parser.add_argument('-s', '--singleline', action='store_true', default=False, help='''The default output is one data point per line like a single-column table.
+If you'd like a single-row table instead, use this option.
+Use this option in conjunction with -d/--delimiter to determine the delimiter between datapoints.
+The default delimiter is a space.''')
+
+parser.add_argument('-d', '--delimiter', type=str, default=" ", help='''Only meaningful when used with -s/--singleline.
+Default is a space. Write the word "tab" if you want tabs. Otherwise, whatever string is provided is used.''')
+
 parser.add_argument('-o', '--outdir', type=str, default="",
                     help = '''If single fast5 specified, it will be reported to stdout.
 If multiple fast5s are specified, they will be saved to files in the working dir by default.
@@ -61,6 +69,13 @@ if args.outdir:
     if args.outdir[-1] != "/":
         args.outdir += "/"
 
+if not args.singleline:
+    delimiter = "\n"
+else:
+    if args.delimiter == 'tab':
+        delimiter = '\t'
+    else:
+        delimiter = args.delimiter
 
 
             
@@ -72,11 +87,11 @@ if __name__ == "__main__":
     f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
     if len(f5list) == 1: ## if only one f5, print to stdout
         for f5 in f5list:
-            print f5.get_raw_signal_string()
+            print f5.get_raw_signal_string(delimiter)
     elif len(f5list) > 1: ## if more than one, print each f5 to own text file
         for f5 in f5list:
             out = open(args.outdir + f5.filebasename + "." + args.readtype + ".rawsignal.txt", 'w')
-            out.write(f5.get_raw_signal_string())
+            out.write(f5.get_raw_signal_string(delimiter))
             out.close()
 
 

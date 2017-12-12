@@ -1086,8 +1086,8 @@ class Fast5(object):
     def get_raw_signal(self):
         return self.f5[self.get_raw_signal_path()][()]
     
-    def get_raw_signal_string(self):
-        return ("\n").join([ str(e) for e in self.get_raw_signal()])
+    def get_raw_signal_string(self, delimiter='\n'):
+        return (delimiter).join([str(e) for e in self.get_raw_signal()])
 
 
     def get_raw_attribute(self, attr):
