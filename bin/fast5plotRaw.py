@@ -48,6 +48,13 @@ parser.add_argument('-p', '--plottype', type=str, default='scatter',
 parser.add_argument('-c', '--color', type=str, default='b',
                     help='''Colors as understood by pyplot... default: b''')
 
+
+parser.add_argument('-s', '--start', type=int, default=0,
+                    help='''Start index of data points to show. Default: 0. i.e. from the beginning.''')
+
+parser.add_argument('-e', '--end', type=int, default=None,
+                    help='''End index of data points to show. Default: number of data points. i.e. to the end.''')
+
 parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
 The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
 The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
@@ -90,8 +97,11 @@ if __name__ == "__main__":
         plt.title(args.title)
         plt.xlabel('Raw Data Point Number')
         plt.ylabel('Level')
-
-        plotter('num', 'raw', 0, f5.get_raw_duration(), {'num':nraw, 'raw':raw}, col=args.color, plottype=args.plottype)
+        if args.end is None:
+            end =  f5.get_raw_duration()
+        else:
+            end = args.end
+        plotter('num', 'raw', args.start, end, {'num':nraw, 'raw':raw}, col=args.color, plottype=args.plottype)
 
 ##        if args.outdir:
 ##            plt.savefig(os.path.join(args.outdir, '%s.png' % f5.filebasename))
