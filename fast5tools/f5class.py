@@ -637,8 +637,19 @@ class Fast5(object):
             if self.GENERAL_PATH.endswith('general'):
                 return self.f5[self.GENERAL_PATH].attrs['model_type']
             elif self.GENERAL_PATH.endswith('basecall_1d'): ## basically a versioning problem that I can rewrite now that I track that
-                model = str(self.f5[self.GENERAL_PATH].attrs['template_model']) + "_" + str(self.f5[self.GENERAL_PATH].attrs['complement_model'])
-                return model
+                try:
+                    return str(self.f5[self.GENERAL_PATH].attrs['template_model']) + "_" + str(self.f5[self.GENERAL_PATH].attrs['complement_model'])
+                except:
+                    pass
+                try:
+                    return str(self.f5[self.GENERAL_PATH].attrs['template_model'])
+                except:
+                    pass
+                try:
+                    return str(self.f5[self.GENERAL_PATH].attrs['model'])
+                except:
+                    raise Exception('Have not found model type in '+ self.GENERAL_PATH + ' for:' + self.filebasename)
+                    quit() ## Don't allow it to continue
         else:
             return "NA"
 

@@ -340,6 +340,8 @@ if __name__ == "__main__":
                 OUT.write( out + '\n' )
                 
                 
-                
+    ## print to stdout?
+    if args.outfile:
+        OUT.close()
 
 
