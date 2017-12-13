@@ -192,13 +192,14 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.
 ##        print
     qbases = n_m + n_mm + n_i
     rbases = n_m + n_mm + n_d
+    n_u = len(alignment.orig_query) - qbases ## these were bases not in the alignment. Since barcode is query... i.e. pieces of barcode not found in read
     assert qbases == alignment.q_end-alignment.q_pos and rbases == alignment.r_end-alignment.r_pos
     assert len(ref) == len(query)
     assert len(ref) == sum([n_m, n_mm, n_d, n_i])
-    outstring = ''
+    outstring = alignment.q_name + '\n'
     outstring += "Ref (top): " + alignment.r_name + ' ' + str(alignment.r_pos) + '-' + str(alignment.r_end) + ' r_bases_aligned:' + str(rbases) + ' pct_r_bases_aligned:' + str(100.0*rbases/len(alignment.orig_ref)) + ' refLen:' + str(len(alignment.orig_ref)) + ' bp\n'
     outstring += "Query (bottom): " + alignment.q_name + ' ' + str(alignment.q_pos) + '-' + str(alignment.q_end) + ' q_bases_aligned:' + str(qbases) + ' pct_q_bases_aligned:'+str(100.0*qbases/len(alignment.orig_query)) + ' queryLen:' + str(len(alignment.orig_query)) + ' bp\n'
-    stats = ["AS:" + str(alignment.score), "Match:"+str(n_m), "Mismatch:"+str(n_mm), "Deletion:"+str(n_d), "Insertion:"+str(n_i), "AlignmentLength:"+str(len(ref)), "PercentIdentity:"+str(100.0*n_m/sum([n_m, n_mm, n_d, n_i]))]
+    stats = ["AS:" + str(alignment.score), "Match:"+str(n_m), "Mismatch:"+str(n_mm), "Deletion:"+str(n_d), "Insertion:"+str(n_i), "AlignmentLength:"+str(len(ref)), "PercentIdentity:"+str(100.0*n_m/sum([n_m, n_mm, n_d, n_i])),  "Barcode_Unaligned:"+str(n_u), "PercentIdentity_with_unaligned:"+str(100.0*n_m/sum([n_m, n_mm, n_d, n_i, n_u]))]
     outstring += (' ').join(stats) + '\n'
     p = np.e**(-1*alignment.score)
     n = len(alignment.orig_ref)*len(alignment.orig_query)
@@ -207,19 +208,29 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.
     outstring += (' ').join(stats) + '\n'
     p_m = 1 - e_i - e_d - e_s
     p_minion_aln =  (p_m**n_m) * (e_s**n_mm) * (e_d**n_d) * (e_i**n_i)
-    n_u = len(alignment.orig_query) - qbases ## these were bases not in the alignment. Since barcode is query... i.e. pieces of barcode not found in read
     Esum = e_s + e_i + e_d
     E_s = e_s/Esum
     E_i = e_i/Esum
     E_d = e_d/Esum
     p_minion_un = (e_s**(E_s*n_u)) * (e_i**(E_i*n_u)) *(e_d**(E_d*n_u)) ## since it is unclear if the unaligned were subs/dels/ins I am making use of all
     p_minion = p_minion_aln * p_minion_un
-    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
+    N=sum([n_m, n_mm, n_i, n_d])
+    N2 = N - n_m
+    N3 = N2 - n_mm
+    N4 = N3 - n_i
+    N5 = N4 - n_d
+    NcK = nchoosek(N, n_m) * nchoosek(N2, n_mm) * nchoosek(N3, n_i) * nchoosek(N4, n_d) 
+    norm_p_minion_aln = NcK * p_minion_aln
+    N_u = N + n_u
+    norm_p_minion = norm_p_minion_aln * p_minion_un ## There seems to be no reason to multiply the unaligned by a nchoosek b/c they are fixed at the ends and correspond to some "single" unknown composite error
+    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion), 'norm_p_minion_aln:'+str(norm_p_minion_aln), 'norm_p_minion:'+str(norm_p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
     outstring += (' ').join(stats) + '\n'
     
     ## actually since the read is the "ref" here.... n_d and n_i are dels/ins from/in read. Barcode is the real "reference" meaning for minion probs we need e_i**n_d and e_d**n_i 
     p_minion_aln =  (p_m**n_m) * (e_s**n_mm) * (e_d**n_i) * (e_i**n_d)
-    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
+    norm_p_minion_aln = NcK * p_minion_aln
+    norm_p_minion = norm_p_minion_aln * p_minion_un
+    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion), 'norm_p_minion_aln:'+str(norm_p_minion_aln), 'norm_p_minion:'+str(norm_p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
     outstring += (' ').join(stats) + '\n'
     
     binom_prob = nchoosek(sum([n_m, n_mm, n_d, n_i]), n_m) * (p_m**n_m) * ((1-p_m)**(n_mm+n_i+n_d))
