@@ -214,8 +214,19 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.
     E_d = e_d/Esum
     p_minion_un = (e_s**(E_s*n_u)) * (e_i**(E_i*n_u)) *(e_d**(E_d*n_u)) ## since it is unclear if the unaligned were subs/dels/ins I am making use of all
     p_minion = p_minion_aln * p_minion_un
-    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)]
+    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
     outstring += (' ').join(stats) + '\n'
+    
+    binom_prob = nchoosek(sum([n_m, n_mm, n_d, n_i]), n_m) * (p_m**n_m) * ((1-p_m)**(n_mm+n_i+n_d))
+    outstring += 'binom_prob_k_matches_in_alignment:' + str(binom_prob) + '\n'
+
+    binom_prob = nchoosek(sum([n_m, n_mm, n_d, n_i, n_u]), n_m) * (p_m**n_m) * ((1-p_m)**(n_mm+n_i+n_d+n_u))
+    outstring += 'binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode:' + str(binom_prob) + '\n'
+ 
+    #in barcode only
+    binom_prob = nchoosek(len(alignment.orig_query), n_m) * (p_m**n_m) * ((1-p_m)**(len(alignment.orig_query)-n_m))
+    outstring += 'binom_prob_k_matches_in_barcode:' + str(binom_prob) + '\n'
+
     if report_prob is not False:
         outstring += "Marginalized Probability Given Barcode Set: " + str(report_prob) + "\n"
     for i in range(0, len(ref), blocksize):
