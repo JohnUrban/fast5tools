@@ -103,7 +103,7 @@ parser.add_argument('-s', '--sequence', action='store_true', default=False, help
 parser.add_argument('-q', '--quals', action='store_true', default=False, help='''Add qual string to output.''')
 
 
-parser_alntype.add_argument('--all', action='store_true', default=False, help='''Is to only show best alignment. This shows all.''')
+parser.add_argument('--all', action='store_true', default=False, help='''Is to only show best alignment. This shows all.''')
 
 
 ## When two different barcodes are expected in a row at 5' end
