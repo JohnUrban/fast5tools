@@ -217,6 +217,11 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.
     stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
     outstring += (' ').join(stats) + '\n'
     
+    ## actually since the read is the "ref" here.... n_d and n_i are dels/ins from/in read. Barcode is the real "reference" meaning for minion probs we need e_i**n_d and e_d**n_i 
+    p_minion_aln =  (p_m**n_m) * (e_s**n_mm) * (e_d**n_i) * (e_i**n_d)
+    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
+    outstring += (' ').join(stats) + '\n'
+    
     binom_prob = nchoosek(sum([n_m, n_mm, n_d, n_i]), n_m) * (p_m**n_m) * ((1-p_m)**(n_mm+n_i+n_d))
     outstring += 'binom_prob_k_matches_in_alignment:' + str(binom_prob) + '\n'
 
