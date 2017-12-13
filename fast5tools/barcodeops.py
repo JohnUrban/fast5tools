@@ -228,6 +228,7 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.
     
     ## actually since the read is the "ref" here.... n_d and n_i are dels/ins from/in read. Barcode is the real "reference" meaning for minion probs we need e_i**n_d and e_d**n_i 
     p_minion_aln =  (p_m**n_m) * (e_s**n_mm) * (e_d**n_i) * (e_i**n_d)
+    p_minion = p_minion_aln * p_minion_un
     norm_p_minion_aln = NcK * p_minion_aln
     norm_p_minion = norm_p_minion_aln * p_minion_un
     stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion), 'norm_p_minion_aln:'+str(norm_p_minion_aln), 'norm_p_minion:'+str(norm_p_minion)] ## p_minion not necessarily comparable when barcodes are different lengths - can divide by bc_len or q*r maybe
