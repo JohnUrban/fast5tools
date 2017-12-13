@@ -142,9 +142,11 @@ def get_formatted_pairwise_alignments(barcodechoice, getall=False):
         return get_formatted_pairwise_alignment(best, report_prob=barcodechoice[0][1])
             
     
-def get_formatted_pairwise_alignment(alignment, blocksize=100, report_prob=False, with_unaligned_portion=False):
+def get_formatted_pairwise_alignment(alignment, blocksize=100, e_s=0.051, e_i=0.049, e_d=0.078, report_prob=False, report_evalue=False, with_unaligned_portion=False):
     ## TODO: printout unaligned portion as part of alignment viz
     ## For report_prob, you need to give the prob
+    ## e_i, e_d, and e_s are insertion/deletion/substitution errors found in early MinION sequencing by Jain et al: Improved data analysis for the MinION nanopore sequencer
+    ## Can compute prob of alignment by p_m=1-e_i-e_d-e_s; 
     n_m = 0
     n_mm = 0
     n_d = 0
@@ -194,11 +196,26 @@ def get_formatted_pairwise_alignment(alignment, blocksize=100, report_prob=False
     assert len(ref) == len(query)
     assert len(ref) == sum([n_m, n_mm, n_d, n_i])
     outstring = ''
-    outstring += "Ref (top): " + alignment.r_name + ':' + str(alignment.r_pos) + '-' + str(alignment.r_end) + ' r_bases_aligned:' + str(rbases) + ' pct_r_bases_aligned:' + str(100.0*rbases/len(alignment.orig_ref)) + ' refLen:' + str(len(alignment.orig_ref)) + ' bp\n'
-    outstring += "Query (bottom): " + alignment.q_name + ':' + str(alignment.q_pos) + '-' + str(alignment.q_end) + ' q_bases_aligned:' + str(qbases) + ' pct_q_bases_aligned:'+str(100.0*qbases/len(alignment.orig_query)) + ' queryLen:' + str(len(alignment.orig_query)) + ' bp\n'
+    outstring += "Ref (top): " + alignment.r_name + ' ' + str(alignment.r_pos) + '-' + str(alignment.r_end) + ' r_bases_aligned:' + str(rbases) + ' pct_r_bases_aligned:' + str(100.0*rbases/len(alignment.orig_ref)) + ' refLen:' + str(len(alignment.orig_ref)) + ' bp\n'
+    outstring += "Query (bottom): " + alignment.q_name + ' ' + str(alignment.q_pos) + '-' + str(alignment.q_end) + ' q_bases_aligned:' + str(qbases) + ' pct_q_bases_aligned:'+str(100.0*qbases/len(alignment.orig_query)) + ' queryLen:' + str(len(alignment.orig_query)) + ' bp\n'
     stats = ["AS:" + str(alignment.score), "Match:"+str(n_m), "Mismatch:"+str(n_mm), "Deletion:"+str(n_d), "Insertion:"+str(n_i), "AlignmentLength:"+str(len(ref)), "PercentIdentity:"+str(100.0*n_m/sum([n_m, n_mm, n_d, n_i]))]
     outstring += (' ').join(stats) + '\n'
-
+    p = np.e**(-1*alignment.score)
+    n = len(alignment.orig_ref)*len(alignment.orig_query)
+    evalue = n*p
+    stats = ['n:' + str(n), 'p:' + str(p), 'e_value:' + str(evalue)]
+    outstring += (' ').join(stats) + '\n'
+    p_m = 1 - e_i - e_d - e_s
+    p_minion_aln =  (p_m**n_m) * (e_s**n_mm) * (e_d**n_d) * (e_i**n_i)
+    n_u = len(alignment.orig_query) - qbases ## these were bases not in the alignment. Since barcode is query... i.e. pieces of barcode not found in read
+    Esum = e_s + e_i + e_d
+    E_s = e_s/Esum
+    E_i = e_i/Esum
+    E_d = e_d/Esum
+    p_minion_un = (e_s**(E_s*n_u)) * (e_i**(E_i*n_u)) *(e_d**(E_d*n_u)) ## since it is unclear if the unaligned were subs/dels/ins I am making use of all
+    p_minion = p_minion_aln * p_minion_un
+    stats = ['p_minion_aln:' + str(p_minion_aln), 'p_minion_un:' + str(p_minion_un), 'p_minion:' + str(p_minion)]
+    outstring += (' ').join(stats) + '\n'
     if report_prob is not False:
         outstring += "Marginalized Probability Given Barcode Set: " + str(report_prob) + "\n"
     for i in range(0, len(ref), blocksize):
