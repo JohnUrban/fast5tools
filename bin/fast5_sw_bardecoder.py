@@ -81,15 +81,25 @@ Specifying this gives a hard/constant number to use.''')
 
 parser.add_argument('--barmin', type=int, default=100, help='''Absolute minimum length to use for barcode search. Default: 100''')
 
-parser.add_argument('--match', type=int, default=1, help='''Match parameter. Should be >= 0. Default: 1.''')
-parser.add_argument('--mismatch', type=int, default=-1, help='''Mismatch penalty. Should be <= 0. Default: -1.''')
+parser.add_argument('--match', type=int, default=4, help='''Match parameter. Should be >= 0. Default: 4.
+After lots of messing around, using 4/-2/-1/-1 seemed to work well.
+Original settings were 1,-1,-1,-1 somewhat modeled after BWA ont2d type.
+However, in Jain et al paper indels cause ~10% error and subs cause ~5% - meaning when trying to align it here gaps should be penalized less than mismatches.
+Also, increasing the match reward encouraged the alignments to cover larger parts of barcodes, allowing better discrimination.
+The --full_query option of python swalign attempts to do this, but with some weird results - so I think this is better.''')
+parser.add_argument('--mismatch', type=int, default=-2, help='''Mismatch penalty. Should be <= 0. Default: -2.''')
 parser.add_argument('--gap_open', type=int, default=-1, help='''Gap open penalty. Should be <= 0.Default: -1.''')
 parser.add_argument('--gap_ext', type=int, default=-1, help='''Gap extension penalty. Should be <= 0.Default: -1.''')
 parser.add_argument('--gap_decay', type=int, default=0, help='''Gap extend decay parameter. Should be >= 0. Default: 0.''')
 
 parser_alntype = parser.add_mutually_exclusive_group()
-parser_alntype.add_argument('--global_aln', action='store_true', default=False, help='''Default is local smith-waterman alignment. Set this to use global alignment as implemented in swalign. Experimental. Cannot use with --full_query''')
-parser_alntype.add_argument('--full_query', action='store_true', default=False, help='''Default is local smith-waterman alignment. Set this to use full query alignment as implemented in swalign. Experimental. Cannot use with --global_aln.''')
+parser_alntype.add_argument('--global_aln', action='store_true', default=False, help='''Default is local smith-waterman alignment. Set this to use global alignment as implemented in swalign.
+Experimental. Cannot use with --full_query.
+This is not recommended, especially with large search spaces for barcodes -- as barcodes begin to look equally unlikely.''')
+parser_alntype.add_argument('--full_query', action='store_true', default=False, help='''Default is local smith-waterman alignment. Set this to use full query alignment as implemented in swalign.
+Experimental. Cannot use with --global_aln.
+This is not recommended as it seems to give weird results.
+Instead try setting the match/mismatch/gap parameters to encourage full barcode alignments - which I attempted to do aready.''')
 
 parser.add_argument('--maxscore', action='store_true', default=False, help='''By default read name and max score probability returned. Add max score to output.''')
 parser.add_argument('--meanscore', action='store_true', default=False, help='''By default read name and max score probability returned. Add mean score to output.''')
