@@ -92,7 +92,9 @@ The --full_query option of python swalign attempts to do this, but with some wei
 parser.add_argument('--mismatch', type=int, default=-2, help='''Mismatch penalty. Should be <= 0. Default: -2.''')
 parser.add_argument('--gap_open', type=int, default=-1, help='''Gap open penalty. Should be <= 0.Default: -1.''')
 parser.add_argument('--gap_ext', type=int, default=-1, help='''Gap extension penalty. Should be <= 0.Default: -1.''')
-parser.add_argument('--gap_decay', type=int, default=0, help='''Gap extend decay parameter. Should be >= 0. Default: 0.''')
+##parser.add_argument('--gap_decay', type=int, default=0, help='''Gap extend decay parameter. Should be >= 0. Default: 0.''')
+parser.add_argument('--gap_decay', type=float, default=0, help='''Gap extend decay parameter. Should be >= 0. Default: 0.''')
+
 
 parser_alntype = parser.add_mutually_exclusive_group()
 parser_alntype.add_argument('--global_aln', action='store_true', default=False, help='''Default is local smith-waterman alignment. Set this to use global alignment as implemented in swalign.
