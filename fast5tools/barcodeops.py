@@ -4,6 +4,8 @@ import numpy as np
 from scipy.special import comb as nchoosek
 
 
+
+
 def read_in_barcodes(barcodetable=False, barcodefasta=False, barcolumns='3,5'):
     ''' barcode table is path to tab-sep file with barcode names and seqs. Assumes columns for those are 3 and 5 respectively.
         barcolumns - default 3,5. Otherwise provide comma-sep pair.
