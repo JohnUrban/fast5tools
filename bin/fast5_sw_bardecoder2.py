@@ -281,6 +281,13 @@ if __name__ == "__main__":
     if args.cigar:
         get.append( 10 )
         headeradds.append('cigar')
+    if args.compute_other_probs:
+        headeradds.append('barcode2')
+        headeradds.append('p_minion')
+        headeradds.append('barcode3')
+        headeradds.append('p_minion_scaled')
+        headeradds.append('barcode4')
+        headeradds.append('p_binomial')
     for add in headeradds:
         header.append( 'set1_topstrand_' + add )
     if two_pos_barcodes:
