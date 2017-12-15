@@ -25,6 +25,7 @@ class BarcodeChoice(object):
         self.score_powers = None
         self._get_alignments()
         self._get_max_scoring_barcode()
+        self._get_score_probabilities()
         self.counts = {}
         self.alnstrings = {}
         self.expectedvalues = {}
@@ -131,12 +132,12 @@ class BarcodeChoice(object):
             self._get_marginalized_minion_probabilities(e_s, e_i, e_d)
         return self.margin_minion_probs[barcode][get]
 
-    def get_binomial_probability(self, barcode, get=2, e_s=0.051, e_i=0.049, e_d=0.078):
+    def get_binomial_probability(self, barcode, get=1, e_s=0.051, e_i=0.049, e_d=0.078):
         '''get in [0,1,2,3] for:
-            1 = binom_prob_k_matches_in_alignment
-            2 = binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode
-            3 = binom_prob_k_matches_in_barcode
-            4 = p_m used'''
+            0 = binom_prob_k_matches_in_alignment
+            1 = binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode
+            2 = binom_prob_k_matches_in_barcode
+            3 = p_m used'''
         try:
             if 1-e_s-e_i-e_d != self.binomprobs[barcode][-1]:
                 self._get_binomial_probability(barcode, e_s, e_i, e_d)
@@ -148,12 +149,12 @@ class BarcodeChoice(object):
         outstring += 'binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode:' + str(self.binomprobs[barcode][1]) + '\n'
         outstring += 'binom_prob_k_matches_in_barcode:' + str(self.binomprobs[barcode][2]) + '\n'
 
-    def get_margin_binomial_probability(self, barcode, get=2, e_s=0.051, e_i=0.049, e_d=0.078):
+    def get_margin_binomial_probability(self, barcode, get=1, e_s=0.051, e_i=0.049, e_d=0.078):
         '''get in [0,1,2,3] for:
-            1 = binom_prob_k_matches_in_alignment
-            2 = binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode
-            3 = binom_prob_k_matches_in_barcode
-            4 = p_m used'''
+            0 = binom_prob_k_matches_in_alignment
+            1 = binom_prob_k_matches_in_alignment_incl_unaligned_portions_of_barcode
+            2 = binom_prob_k_matches_in_barcode
+            3 = p_m used'''
         if not self.margin_binom_probs:
             self._get_marginalized_binomial_probabilities(e_s, e_i, e_d)
         elif 1-e_s-e_i-e_d != self.binomprobs[barcode][-1]:
@@ -358,7 +359,7 @@ class BarcodeChoice(object):
         try:
             return self.alnstrings[barcode]['header']
         except:
-            outstring = barcode + '\n'
+            outstring = barcode + ' to '  + self.alignments[barcode].r_name + '\n'
             outstring += "Ref (top): " + self.alignments[barcode].r_name + ' ' + str(self.alignments[barcode].r_pos) + '-' + str(self.alignments[barcode].r_end) + ' r_bases_aligned:' + str(self.counts[barcode]['rbases']) + ' pct_r_bases_aligned:' + str(self.counts[barcode]['PercentRbasesAligned']) + ' refLen:' + str(self.counts[barcode]['refLen']) + ' bp\n'
             outstring += "Query (bottom): " + self.alignments[barcode].q_name + ' ' + str(self.alignments[barcode].q_pos) + '-' + str(self.alignments[barcode].q_end) + ' q_bases_aligned:' + str(self.counts[barcode]['qbases']) + ' pct_q_bases_aligned:'+str(self.counts[barcode]['PercentQbasesAligned']) + ' queryLen:' + str(self.counts[barcode]['queryLen']) + ' bp\n'
             stats = ["AS:" + str(self.alignments[barcode].score), "Match:"+str(self.counts[barcode]['m']), "Mismatch:"+str(self.counts[barcode]['mm']), "Deletion:"+str(self.counts[barcode]['d']), "Insertion:"+str(self.counts[barcode]['i']), "AlignmentLength:"+str(self.counts[barcode]['alnlen']), "PercentIdentity:"+str(self.counts[barcode]['PercentIdentity']),  "Barcode_Unaligned:"+str(self.counts[barcode]['u']), "PercentIdentity_with_unaligned:"+str(self.counts[barcode]['PercentIdentity_with_unaligned'])]

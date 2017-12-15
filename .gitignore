@@ -8,3 +8,4 @@ gen_table.sh
 build/*
 dist/*
 stats.del*
+bin/old
