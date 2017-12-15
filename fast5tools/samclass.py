@@ -399,7 +399,11 @@ class SamRecord(object):
         if self.fast5info is None: 
             self.fast5info = self.find_given_extra_field(regex='F5:Z:(.*)', output_type=str)
         return self.fast5info
-            
+
+    def get_BC_field(self):
+        '''Only works with SAM files that have the BC:Z: tag from fast5tools'''
+        return self.find_given_extra_field(regex='BC:Z:(.*)', output_type=str)
+ 
     def get_AS_field(self):
         '''Assumes AS:i: field is present for now...'''
         return self.find_given_extra_field(regex='AS:i:(.*)', output_type=int)
@@ -695,6 +699,7 @@ class SplitReadSamRecord(object):
         self.num_aln = None
         self.readname = None
         self.fast5info = None
+        self.bcinfo = None
         self.readlength = None
         self.pctid = None
 ##        self.readcoords = None
@@ -723,6 +728,14 @@ class SplitReadSamRecord(object):
             for record in self.records:
                 assert record.get_fast5_field() == self.fast5info
         return self.fast5info
+
+    def get_BC_info(self):
+        ''' BC is fast5tools bardecoder BarCode field - BC:Z:_____'''
+        if self.bcinfo is None:
+            self.bcinfo = self.records[0].get_BC_field()
+            for record in self.records:
+                assert record.get_BC_field() == self.bcinfo
+        return self.bcinfo
 
     def get_mapq_fields(self):
         return [record.get_mapq_field() for record in self.records]

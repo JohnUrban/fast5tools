@@ -76,12 +76,23 @@ parser.add_argument('--require_strand', '-rs', action='store_true', default=Fals
 parser.add_argument('--reference', '-r', type=str, default=False,
                     help=''' Path to reference genome file to be used to extract sequences corresponding to genomic windows identified.
                             Optional. Sequences will be tagged on to an additional end column if provided.''')
+
+
+parser.add_argument('--getF5info', '-f5', action='store_true', default=False,
+                    help='''Return F5:Z: field from fast5tools in output.
+This is from extracting fasta/fastq using fast5tofastx.py with --comments and --samflag''')
+
+parser.add_argument('--getBCinfo', '-BC', action='store_true', default=False,
+                    help=''' Return BC:Z: field from fast5tools in output.
+This is from creating fasta/fastq from output of fast5_sw_bardecoder.py specified with --sequence/--quals,
+and merging all desired barcode info into string following BC:Z:''')
+
 args = parser.parse_args()
 
 
 
 
-get_genomic_windows(samfilepath=args.sam, flank=args.flank, merge_dist=args.merge_dist, majority=args.majority, require_order=args.require_order, require_strand=args.require_strand, reference=args.reference)
+get_genomic_windows(samfilepath=args.sam, flank=args.flank, merge_dist=args.merge_dist, majority=args.majority, require_order=args.require_order, require_strand=args.require_strand, reference=args.reference, getF5field=args.getF5info, getBCfield=args.getBCinfo)
 
 
 
