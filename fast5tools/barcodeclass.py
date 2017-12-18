@@ -161,6 +161,37 @@ class BarcodeChoice(object):
             self._get_marginalized_binomial_probabilities(e_s, e_i, e_d)
         return self.margin_binom_probs[barcode][get]
 
+    def get_edit_distance(self, barcode):
+        try:
+            return self.counts[barcode]['mm'] + self.counts[barcode]['d'] + self.counts[barcode]['i']
+        except:
+            self._compute_formatted_alignment_strings_for(barcode)
+            return self.counts[barcode]['mm'] + self.counts[barcode]['d'] + self.counts[barcode]['i']
+
+    def get_edit_distance_with_query_unaln(self, barcode):
+        try:
+            return self.get_edit_distance(barcode) + self.counts[barcode]['u']
+        except:
+            self._compute_formatted_alignment_strings_for(barcode)
+            return self.get_edit_distance(barcode) + self.counts[barcode]['u']
+
+    def get_edit_distance_with_ref_unaln(self, barcode):
+        try:
+            return self.get_edit_distance(barcode) + self.counts[barcode]['ur']
+        except:
+            self._compute_formatted_alignment_strings_for(barcode)
+            return self.get_edit_distance(barcode) + self.counts[barcode]['ur']
+
+    def get_edit_distance_with_total_unaln(self, barcode):
+        try:
+            return self.get_edit_distance(barcode) + self.counts[barcode]['utotal']
+        except:
+            self._compute_formatted_alignment_strings_for(barcode)
+            return self.get_edit_distance(barcode) + self.counts[barcode]['utotal']
+
+        
+            
+        
     def get_score_string(self):
         self._alignment_check()
         self._score_check()
@@ -311,12 +342,15 @@ class BarcodeChoice(object):
 
         self.counts[barcode]['qbases'] = self.counts[barcode]['m'] + self.counts[barcode]['mm'] + self.counts[barcode]['i']
         self.counts[barcode]['rbases'] = self.counts[barcode]['m'] + self.counts[barcode]['mm'] + self.counts[barcode]['d']
-        self.counts[barcode]['u'] = len(self.alignments[barcode].orig_query) - self.counts[barcode]['qbases'] ## these were bases not in the alignment. Since barcode is query... i.e. pieces of barcode not found in read
+        self.counts[barcode]['refLen'] = len(self.alignments[barcode].orig_ref)
+        self.counts[barcode]['queryLen'] = len(self.alignments[barcode].orig_query)
+        
+        self.counts[barcode]['u'] = self.counts[barcode]['queryLen'] - self.counts[barcode]['qbases'] ## these were bases not in the alignment. Since barcode is query... i.e. pieces of barcode not found in read
+        self.counts[barcode]['ur'] = self.counts[barcode]['refLen'] - self.counts[barcode]['rbases']
+        self.counts[barcode]['utotal'] = self.counts[barcode]['u'] + self.counts[barcode]['ur'] 
         self.counts[barcode]['alnlen'] = sum([self.counts[barcode][count] for count in ('m', 'mm', 'i', 'd')])
         self.counts[barcode]['PercentIdentity'] = 100.0*self.counts[barcode]['m']/self.counts[barcode]['alnlen']
         self.counts[barcode]['PercentIdentity_with_unaligned'] = 100.0*self.counts[barcode]['m']/sum([self.counts[barcode]['alnlen'], self.counts[barcode]['u']])
-        self.counts[barcode]['refLen'] = len(self.alignments[barcode].orig_ref)
-        self.counts[barcode]['queryLen'] = len(self.alignments[barcode].orig_query)
         self.counts[barcode]['PercentRbasesAligned'] = 100.0*self.counts[barcode]['rbases']/self.counts[barcode]['refLen']
         self.counts[barcode]['PercentQbasesAligned'] = 100.0*self.counts[barcode]['qbases']/self.counts[barcode]['queryLen']
         assert self.counts[barcode]['qbases'] == self.alignments[barcode].q_end-self.alignments[barcode].q_pos
