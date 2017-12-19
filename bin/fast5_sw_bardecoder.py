@@ -44,10 +44,6 @@ Choices: 'template', 'complement', '2d'.
 Default: template.''')
 
 
-parser.add_argument('-o', '--outprefix', default="fast5_sw_bardecoded",
-                   type= str, 
-                   help='''Choose an outprefix for files generated. Default: fast5_sw_bardecoded''')
-
 parser_barcode = parser.add_mutually_exclusive_group(required=True)
 parser_barcode.add_argument('-b', '--barcodetable', type=str, default=False,
                    help='''Path to file with barcode names and sequences.
@@ -85,7 +81,7 @@ parser.add_argument('--barmin', type=int, default=100, help='''Absolute minimum 
 parser.add_argument('--match', type=int, default=4, help='''Match parameter. Should be >= 0. Default: 4.
 After lots of messing around, using 4/-2/-1/-1 seemed to work well.
 Original settings were 1,-1,-1,-1 somewhat modeled after BWA ont2d type.
-However, in Jain et al paper indels cause ~10% error and subs cause ~5% - meaning when trying to align it here gaps should be penalized less than mismatches.
+However, in Jain et al paper indels cause ~10 pct error and subs cause ~5 pct - meaning when trying to align it here gaps should be penalized less than mismatches.
 Also, increasing the match reward encouraged the alignments to cover larger parts of barcodes, allowing better discrimination.
 The --full_query option of python swalign attempts to do this, but with some weird results - so I think this is better.''')
 parser.add_argument('--mismatch', type=int, default=-2, help='''Mismatch penalty. Should be <= 0. Default: -2.''')
@@ -172,6 +168,11 @@ parser.add_argument('-a', '--abspath', action='store_true', default=False, help=
 Using this option replaces that default with absolute path of their location.
 Note: this works best if the fast5s are located in sub-directories as per python os.path.abspath limitations.''')
 
+##parser.add_argument('-o', '--outprefix', default="fast5_sw_bardecoded",
+##                   type= str, 
+##                   help='''Choose an outprefix for files generated. Default: fast5_sw_bardecoded''')
+
+
 parser.add_argument('--outfile', type=str, default=False, help='''Default is to print to stdout. This will redirect into a file.''')
 
 
@@ -217,7 +218,10 @@ if __name__ == "__main__":
         OUT = open(args.outfile, 'w')
         
     ## For now, this is controlled to grab the fastq with only the filename
-    output = get_fast5tofastx_output_fxn('fastq_only_filename')
+    if args.abspath:
+        output = get_fast5tofastx_output_fxn('fastq_only_abspath')
+    else:
+        output = get_fast5tofastx_output_fxn('fastq_only_filename')
     getread = get_fast5tofastx_readtype_fxn(args.readtype)
 
     #get barcodes and search parameters 
