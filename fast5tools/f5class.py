@@ -107,6 +107,11 @@ MAX_EVENTS = "/Analyses/Basecall_2D_000/Configuration/general/max_events"  #01 #
 SAMPLE_RATE = "/Analyses/Basecall_2D_000/Configuration/general/sampling_rate" #01
 
 
+TOMBO="/Analyses/RawGenomeCorrected_000/"
+TOMBO_BC=TOMBO + "BaseCalled_template/"
+TOMBO_ALN=TOMBO_BC + 'Alignment/'
+TOMBO_EVENTS=TOMBO_BC+'Events/'
+
 class Fast5(object):
     def __init__(self, filename):
         self.filename = filename
@@ -1204,8 +1209,82 @@ class Fast5(object):
            eventstr += ('\t').join([str(e) for e in event]) + '\n'
         return eventstr.rstrip()
 
-        
+    def tombo_exists(self):
+        try:
+            self.f5[TOMBO]
+            return True
+        except:
+            return False
+
+    def tombo_aln_exists(self):
+        try:
+            self.f5[TOMBO_ALN]
+            return True
+        except:
+            return False
+
+    def tombo_events_exist(self):
+        try:
+            self.f5[TOMBO_EVENTS]
+            return True
+        except:
+            return False
+
+    def tombo_params_exist(self):
+        try:
+            self.f5[TOMBO_BC]
+            return True
+        except:
+            return False
+
+    def tombo_successful(self):
+        return self.f5[TOMBO_BC].attrs['status'] == 'success'
+
+    def get_tombo_version(self):
+        print TOMBO
+        return self.f5[TOMBO].attrs['tombo_version']
     
+    def get_tombo_alignment_attribute(self, attr):
+        return self.f5[TOMBO_ALN].attrs[attr]
+
+    def get_tombo_parameters(self):
+        return [(k,v) for k,v in self.f5[TOMBO_BC].attrs.iteritems()]
+
+    def get_tombo_parameter_string(self, delim='\t'):
+        return (delim).join([str(e[1]) for e in self.get_tombo_parameters()])
+
+    def get_tombo_parameter_header_string(self, delim='\t'):
+        return (delim).join([str(e[0]) for e in self.get_tombo_parameters()])
+
+    def get_tombo_map_position(self):
+        '''Must be a fast5 brought through tombo resquiggle/mapping process
+        Returns 4-tuple of chr, start, end, strand'''
+        chrom = self.get_tombo_alignment_attribute('mapped_chrom')
+        start = self.get_tombo_alignment_attribute('mapped_start')
+        end = self.get_tombo_alignment_attribute('mapped_end')
+        strand = self.get_tombo_alignment_attribute('mapped_strand')
+        return chrom, start, end, strand
+
+    def get_tombo_map_position_string(self,delim='\t'):
+        '''Must be a fast5 brought through tombo resquiggle/mapping process'''
+        return (delim).join([str(e) for e in self.get_tombo_map_position()])
+        
+
+    def get_tombo_events(self):
+        '''Must be a fast5 brought through tombo resquiggle/mapping process'''
+        return self.f5[TOMBO_EVENTS][()]
+
+
+    def get_tombo_events_string(self):
+        return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_tombo_events()])
+
+        
+    def get_tombo_events_header(self, readtype): 
+        return self.f5[TOMBO_EVENTS].dtype.names
+
+    def get_tombo_events_header_string(self, readtype): 
+        return ("\t").join([str(e) for e in self.get_tombo_events_header(readtype)])
+
         
         
 
