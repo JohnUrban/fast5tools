@@ -479,7 +479,10 @@ class Fast5(object):
         '''eventstpye in input, template, complement'''
         ''' if readtype is 2d, it just gives num of all events'''
         if readtype == "input":
-            return self.f5["/Analyses/EventDetection_000/Reads/" + self.get_read_number() + "/Events"].shape[0]
+            try:
+                return self.f5["/Analyses/EventDetection_000/Reads/" + self.get_read_number() + "/Events"].shape[0]
+            except: ## possibly later file version when this was deprecated
+                return '-'
         elif readtype == "2d":
             return self._get_attr(path = self._get_split_hairpin_path(), attr = "num_events")
         else:
