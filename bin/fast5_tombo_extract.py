@@ -69,6 +69,28 @@ The tarlite method only requires the disk space already taken by the tarchive an
 Tarlite may become the default method after some testing if it performs at similar speeds.''')
 
 
+##TODO
+parser.add_argument('-H', '--header', default=False,
+                   action='store_true', 
+                   help='''Print only header and exit.''')
+
+parser.add_argument('-W', '--withheader', default=False,
+                   action='store_true', 
+                   help='''Print events with header line.''')
+
+
+parser.add_argument('-T', '--headertable', default=False,
+                   action='store_true', 
+                   help='''Instead of printing tab-separated header, print 2 columns:
+1. filename. 2. comma-separated header names. NOTE: this over-rides the default behavior when more than 1 fast5 of writing a text file for each fast5.
+It might make more sense to do this when all you want is to see headers of a set of different fast5s for comparison.''')
+
+
+parser.add_argument('-o', '--outdir', type=str, default="",
+                    help = '''If single fast5 specified, it will be reported to stdout.
+If multiple fast5s are specified, they will be saved to files in the working dir by default.
+This flag allows you to specify a different output directory.
+Filenames will be the the name of the fast5 file with .tombo_events.txt appended.''')
 
 
 args = parser.parse_args()
@@ -81,20 +103,46 @@ args = parser.parse_args()
 #################################################
 
 if __name__ == "__main__":
+    if args.outdir:
+        if not os.path.isdir(args.outdir):
+            os.mkdir(args.outdir)
+        if args.outdir[-1] != "/":
+            args.outdir += "/"
 
-    for f5 in Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite):
-        if f5.is_not_corrupt() and f5.is_nonempty and f5.tombo_exists():
-            if args.getmap and f5.tombo_aln_exists():
-                print f5.get_tombo_map_position_string() + '\t' + f5.filename
-            elif args.getevents and f5.tombo_events_exist():
-                print f5.get_tombo_events_string() ## this needs to write to file when more than one f5
-            elif args.getparams and f5.tombo_params_exist():
-                if f5.tombo_successful():
-                    print f5.filename + '\t' + f5.get_tombo_parameter_string() + '\t' + f5.get_tombo_parameter_header_string(',')
+    f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
+    f5listlen = len(f5list)
+
+    if f5listlen == 1 or args.getmap or args.getparams: ## If only 1 file to extract events from OR getting map positions or parameters for reads (which have readnames as a column in output), report to stdout 
+        for f5 in f5list:
+            if f5.is_not_corrupt() and f5.is_nonempty and f5.tombo_exists():
+                if args.getmap and f5.tombo_aln_exists():
+                    print f5.get_tombo_map_position_string() + '\t' + f5.filename
+                elif args.getevents and f5.tombo_events_exist():
+                    print f5.get_tombo_events_string() ## this needs to write to file when more than one f5
+                elif args.getparams and f5.tombo_params_exist():
+                    if f5.tombo_successful():
+                        print f5.filename + '\t' + f5.get_tombo_parameter_string() + '\t' + f5.get_tombo_parameter_header_string(',')
+                    else:
+                        print f5.filename + '\t' +  ('_').join(f5.get_tombo_parameter_string().split()) + '\t' + ('\t').join([str(e) for e in ['*']*7])  + '\t' + f5.get_tombo_parameter_header_string(',')
+            else:
+                if not f5.tombo_exists():
+                    print "No_Tombo_traces_found...\t" + f5.filename
+    elif f5listlen > 1:
+        ## Only matters when extracting events
+        for f5 in f5list:
+            if args.getevents and f5.tombo_events_exist():
+                if args.header:
+                    if args.headertable:
+                        print ("\t").join([f5.filename, f5.get_tombo_events_header()])
+                    else:
+                        out = open(args.outdir + f5.filebasename + ".tombo_events_headers.txt", 'w')
+                        out.write(f5.get_tombo_events_header_string())
+                        out.close()
                 else:
-                    print f5.filename + '\t' +  ('_').join(f5.get_tombo_parameter_string().split()) + '\t' + ('\t').join([str(e) for e in ['*']*7])  + '\t' + f5.get_tombo_parameter_header_string(',')
-        else:
-            if not f5.tombo_exists():
-                print "No_Tombo_traces_found...\t" + f5.filename
+                    out = open(args.outdir + f5.filebasename + ".tombo_events.txt", 'w')
+                    if args.withheader:
+                        out.write(f5.get_tombo_events_header_string())
+                    out.write(f5.get_tombo_events_string())
+                    out.close()
 
 

@@ -1282,11 +1282,11 @@ class Fast5(object):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_tombo_events()])
 
         
-    def get_tombo_events_header(self, readtype): 
+    def get_tombo_events_header(self): 
         return self.f5[TOMBO_EVENTS].dtype.names
 
-    def get_tombo_events_header_string(self, readtype): 
-        return ("\t").join([str(e) for e in self.get_tombo_events_header(readtype)])
+    def get_tombo_events_header_string(self): 
+        return ("\t").join([str(e) for e in self.get_tombo_events_header()])
 
         
         
