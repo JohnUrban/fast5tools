@@ -37,14 +37,11 @@ Assumes all fast5 files have '.txt' extension.
 If inside dir of dirs with .txt files, then can just do "*" to get all files from all dirs.
 IF file extension is anything other than .txt, change it with --extension/-e''')
 
-parser.add_argument('-e','--extension', type=str, default=".txt", help='''Provide the common file extension for target files. Default is .txt. Note that no other file type in target directory, fofn, etc should have ths extension
+parser.add_argument('-e','--extension', type=str, default=".txt", help='''Provide the common file extension for target files.
+Default is .txt.
+Note that no other file type in target directory, fofn, etc should have this extension.
 For K>6, it will just report information on kmers seen.''')
 
-parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
-The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
-The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
-The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
-Tarlite may become the default method after some testing if it performs at similar speeds.''')
 
 
 parser.add_argument('-k','--kmersize', type=int, default=1, help='''Provide kmer size. Default: 1. Common: 5 or 6.
@@ -52,13 +49,17 @@ It will report information on all possible ACGT kmers up to k=6, reporting None 
 For K>6, it will just report information on kmers seen.''')
 
 out_parser = parser.add_mutually_exclusive_group()
-out_parser.add_argument('-w','--withdist', action='store_true', default=False, help='''By default, the output is
-summary statistics for each kmer. This says to also include a comma-separated list of the values that make up the distribution.
-If --kmer_out_fprefix provided, then dist is split up into 3 files for mu, sd, n - and the stats are split up into 3 corresponding files.''')
+out_parser.add_argument('-w','--withdist', action='store_true', default=False,
+                        help='''By default, the output is summary statistics for each kmer.
+This says to also include a comma-separated list of the values that make up the distribution.
+If --kmer_out_fprefix provided, then dist is split up into 3 files for mu, sd, n.
+The stats are split up into 3 corresponding files as well.''')
 
-out_parser.add_argument('-d','--onlydist', action='store_true', default=False, help='''By default, the output is
-summary statistics for each kmer. This says to instead produce a comma-separated list of the values that make up the distribution (without the summary stats).
-If --kmer_out_fprefix provided, then dist is split up into 3 files for mu, sd, n. Stats not reported.''')
+out_parser.add_argument('-d','--onlydist', action='store_true', default=False,
+                        help='''By default, the output is summary statistics for each kmer.
+This says to instead produce a comma-separated list of the values that make up the distribution (without the summary stats).
+If --kmer_out_fprefix provided, then dist is split up into 3 files for mu, sd, n.
+Stats not reported.''')
 
 parser.add_argument('-r','--rewrite', action='store_true', default=False, help='''By default, the output is
 summary statistics for each kmer. This says to instead output the events re-written as kmers of length k.
@@ -85,8 +86,31 @@ the constituent MUs and SDs of inidividual bases according to the number of data
 This says to instead give each base that makes up the kmer uniform weighting.''')
 
 
+parser.add_argument('--notarlite', action='store_true', default=False, help=''' Default method extracts 1 file from a given tarchive at a time, processes, and deletes it.
+This says to turn that off resulting in extracting entire tarchive before proceeding (and finally deleting).
+It is possible that --notarlite is faster, but at the expense of exceeding file number limits or disk storage quotas.''')
+
+parser.add_argument('-T', '--targzout', type=str, default=False,
+                    help='''Only relevant for --rewrite.
+                    This will make a file of the rewritten events, add the file to a growing tarchive,
+                    followed by deleting the orignal file. This is a good option to prevent exceeding file number quotas, etc.
+                    Provide a tarchive name - this script insists on using .tar.gz at the end, and will add it if absent.
+                    This will put the tarchive into the specified outdir whether or not the outdir is included as part of the given name here.''')
+
+
+
 args = parser.parse_args()
 
+def tarpit(tarchive, fn, arcname=None):
+    ''' Assumes tarhive is an already existing tarfile object for 'w|gz'
+        fn is filename to add.
+        Will add file to the arhive, then delete the original...
+        Be careful.
+        arcname is an alternate name to give the file inside the tarchive.'''
+    if arcname is None:
+        arcname = fn
+    tarchive.add(name=fn, arcname=arcname)
+    os.remove(fn)
 
 
 
@@ -289,6 +313,11 @@ def get_stats(l):
 #################################################
 
 if __name__ == "__main__":
+    tarlite=True
+    if args.notarlite:
+        tarlite=False
+
+        
     if args.outdir:
         if not os.path.isdir(args.outdir):
             try:
@@ -297,7 +326,16 @@ if __name__ == "__main__":
                 os.system("mkdir -p " + args.outdir)
         if args.outdir[-1] != "/":
             args.outdir += "/"
+            
+    if args.targzout and args.rewrite:
+        if not args.targzout.endswith('.tar.gz'):
+            args.targzout += '.tar.gz'
+        tarpath = args.targzout
+        if not tarpath.startswith(args.outdir):
+            tarpath = args.outdir + tarpath
+        tarchive = tarfile.open(tarpath, 'w|gz')
 
+        
     if args.uniform:
         weighting = "_uniform"
     else:
@@ -308,7 +346,8 @@ if __name__ == "__main__":
     kmers = initiateDict(MERS)
     nreadsdict = initiateReadDict(MERS)
     
-    filelist = FileList(args.files, extension=args.extension)
+    filelist = FileList(args.files, extension=args.extension, keep_tar_footprint_small=tarlite)
+
     for fh in filelist:
         rewrite_name = args.outdir + ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + str(k) + "mers.txt"
         ## READ IN AND ADD TO SUMMARY
@@ -317,7 +356,11 @@ if __name__ == "__main__":
         nlines = len(flines)
         if nlines > k:
             mu, sd, start, n, b = get_events(flines, nlines)
+            # next step also does event re-writing to file inside function
             kmers, kmerdetected = get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, args.uniform, args.rewrite, rewrite_name)
+            if args.targzout and args.rewrite:
+                arcname = ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + str(k) + "mers.txt"
+                tarpit(tarchive, rewrite_name, arcname)
             for kmer, detected in kmerdetected.iteritems():
                 if detected:
                     nreadsdict[kmer] += 1
@@ -402,7 +445,8 @@ if __name__ == "__main__":
             mu_dist_ofh.close()
             sd_dist_ofh.close()
             n_dist_ofh.close()
-
+    if args.targzout and args.rewrite:
+        tarchive.close()
         
         
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python2.7
 
-import h5py, os, sys
+import h5py, os, sys, tarfile
 import cStringIO as StringIO
 from Bio import SeqIO
 from fast5tools.f5class import *
@@ -92,12 +92,29 @@ If multiple fast5s are specified, they will be saved to files in the working dir
 This flag allows you to specify a different output directory.
 Filenames will be the the name of the fast5 file with .tombo_events.txt appended.''')
 
+parser.add_argument('-T', '--targzout', type=str, default=False,
+                    help=''' For now, only relevant to --getevents with >1 fast5 file as input.
+                    This will extract the events into a file, then add the file to a growing tarchive,
+                    followed by deleting the file. This is a good option to prevent exceeding file number quotas, etc.
+                    Provide a tarchive name - this script insists on using .tar.gz at the end, and will add it if absent.
+                    This will put the tarchive into the specified outdir whether or not the outdir is included as part of the given name here.''')
 
 args = parser.parse_args()
 
 
                 
-            
+
+def tarpit(tarchive, fn, arcname=None):
+    ''' Assumes tarhive is an already existing tarfile object for 'w|gz'
+        fn is filename to add.
+        Will add file to the arhive, then delete the original...
+        Be careful.
+        arcname is an alternate name to give the file inside the tarchive.'''
+    if arcname is None:
+        arcname = fn
+    tarchive.add(name=fn, arcname=arcname)
+    os.remove(fn)
+
 #################################################
 #### EXECUTE @@@@@@@@@@@@
 #################################################
@@ -108,6 +125,15 @@ if __name__ == "__main__":
             os.mkdir(args.outdir)
         if args.outdir[-1] != "/":
             args.outdir += "/"
+
+    if args.targzout:
+        if not args.targzout.endswith('.tar.gz'):
+        if not args.targzout.endswith('.tar.gz'):
+            args.targzout += '.tar.gz'
+        tarpath = args.targzout
+        if not tarpath.startswith(args.outdir):
+            tarpath = args.outdir + tarpath
+        tarchive = tarfile.open(tarpath, 'w|gz')
 
     f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
     f5listlen = len(f5list)
@@ -135,14 +161,26 @@ if __name__ == "__main__":
                     if args.headertable:
                         print ("\t").join([f5.filename, f5.get_tombo_events_header()])
                     else:
-                        out = open(args.outdir + f5.filebasename + ".tombo_events_headers.txt", 'w')
+                        fn = args.outdir + f5.filebasename + ".tombo_events_headers.txt"
+                        out = open(fn, 'w')
                         out.write(f5.get_tombo_events_header_string())
                         out.close()
+                        if args.targzout:
+                            arcfn = f5.filebasename + ".tombo_events_headers.txt"
+                            tarpit(tarchive, fn, arcfn)
                 else:
-                    out = open(args.outdir + f5.filebasename + ".tombo_events.txt", 'w')
+                    fn = args.outdir + f5.filebasename + ".tombo_events.txt"
+                    out = open(fn, 'w')
                     if args.withheader:
                         out.write(f5.get_tombo_events_header_string())
                     out.write(f5.get_tombo_events_string())
                     out.close()
+                    if args.targzout:
+                        arcfn = f5.filebasename + ".tombo_events.txt"
+                        tarpit(tarchive, fn, arcfn)
+
+    if args.targzout:
+        tarchive.close()
 
 
+## TODO - do reference mapped events by getting map position and arithmeticing the start and end across events...
