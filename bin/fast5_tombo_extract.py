@@ -128,7 +128,6 @@ if __name__ == "__main__":
 
     if args.targzout:
         if not args.targzout.endswith('.tar.gz'):
-        if not args.targzout.endswith('.tar.gz'):
             args.targzout += '.tar.gz'
         tarpath = args.targzout
         if not tarpath.startswith(args.outdir):
