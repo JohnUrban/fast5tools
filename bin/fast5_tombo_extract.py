@@ -92,7 +92,7 @@ If multiple fast5s are specified, they will be saved to files in the working dir
 This flag allows you to specify a different output directory.
 Filenames will be the the name of the fast5 file with .tombo_events.txt appended.''')
 
-parser.add_argument('-T', '--targzout', type=str, default=False,
+parser.add_argument('--targzout', type=str, default=False,
                     help=''' For now, only relevant to --getevents with >1 fast5 file as input.
                     This will extract the events into a file, then add the file to a growing tarchive,
                     followed by deleting the file. This is a good option to prevent exceeding file number quotas, etc.
