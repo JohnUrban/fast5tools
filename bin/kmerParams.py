@@ -81,9 +81,35 @@ This will redirect into mu_stats/sd_stats/n_stats/mu_dist/sd_dist/n_dist files o
 These files can be collapsed together with 'paste' afterward if need be.''')
 
 
-parser.add_argument('-u','--uniform', action='store_true', default=False, help='''By default, mu and sd values for a kmer are taken by weighting
-the constituent MUs and SDs of inidividual bases according to the number of data points they each had.
-This says to instead give each base that makes up the kmer uniform weighting.''')
+approach_parser = parser.add_mutually_exclusive_group(required=True)
+approach_parser.add_argument('-W','--weighted', action='store_true', default=False, help=''' Mu and sd values for a kmer are calculated as a weighted mean by
+weighting the constituent MUs and SDs assigned by tombo to inidividual bases according to the number of data points they each had.''')
+
+
+approach_parser.add_argument('-U','--uniform', action='store_true', default=False, help='''Mu and sd values for a kmer are calculated as a uniformly-weighted mean by
+averaging the values of each constituent MUs and SDs assigned by tombo to inidividual bases (w/o regard to how many datapoints each had).''')
+
+approach_parser.add_argument('-P','--kmer_pos', type=int, default=False, help='''Mu and sd values for a kmer are taken from just one of
+the values of the constituent MUs and SDs assigned by tombo to inidividual bases (instead of averaging). The underlying base that is used
+is determined by the integer given w/ this option that denotes the 0-based index within the kmer that contains values to assign to the whole kmer.
+This is in contrast to trying to average values of each base that makes up the kmer.''')
+
+parser.add_argument('-G','--genomic_approach', action='store_true', default=False, help='''
+Not yet implemented.
+
+The 3 other options collect all values associated with a kmer from all reads.
+Different coverage levels across the different places in the genome where that kmer occurs will give differential weights to the distribution of values for that kmer.
+This is not necessarily bad, but might develop a model that is overfit to the particular dataset.
+They are certainly fine solutions when there are few contexts (genomic sites) for a few or many of the kmers.
+However, Tombo takes an approach where each genomic site that a kmer appears is treated like a "biological replicate" and all the values
+assigned to it are treated like "technical replicates". Overall, it takes only the median value over each position.
+The distribution of values for that kmer then is the size-N distribution of median values over the N genomic sites the kmer appears.
+The genomic_position approach can, in theory, be applied to all 3 approaches above (weighted means, uniform means, and kmer_position).
+In the future, this option will be a modifier for all 3 options.
+For now, it is only set up to be a modifier for the --kmer_pos approach - i.e. mu and sd values will be taken from a given pos inside the kmer at each genomic site.
+
+If using this approach, you need to provide genomic event text files as opposed to regular (tombo) event files.
+''')
 
 
 parser.add_argument('--notarlite', action='store_true', default=False, help=''' Default method extracts 1 file from a given tarchive at a time, processes, and deletes it.
@@ -129,6 +155,8 @@ def get_all_kmers(k):
         MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT","ACGT","ACGT")]
     else:
         MERS = []
+        ## for all these, can do:
+        ## MERS= [''.join(e) for e in itertools.product("ACGT", repeat=k)]
     return MERS
 
 def initiateDict(MERS):
@@ -151,6 +179,25 @@ def prepareDict(kmers, mer):
     return kmers
 
 
+def initiateGenomicDict(MERS):
+    kmers = defaultdict(dict)
+    for mer in MERS:
+        kmers[mer] = {}
+    return kmers
+
+def prepareGenomicDict(kmers, mer, genomic_coords):
+    #has kmer been added?
+    try:
+        kmers[mer]
+    except:
+        kmers[mer] = {}
+    #have genomic_coords been added
+    try:
+        kmers[mer][genomic_coords]
+    except:
+        kmers[mer][genomic_coords] = {'mu':[], 'sd':[], 'n':[]}
+    return kmers
+
 def get_events(flines, nlines):
     mu = np.zeros(shape=nlines, dtype=float)
     sd = np.zeros(shape=nlines, dtype=float)
@@ -166,6 +213,30 @@ def get_events(flines, nlines):
         b[i] = str(line[4])
 
     return mu, sd, start, n, b
+
+
+
+def get_genomic_events(flines, nlines):
+    mu = np.zeros(shape=nlines, dtype=float)
+    sd = np.zeros(shape=nlines, dtype=float)
+    start = np.zeros(shape=nlines, dtype=float)
+    n = np.zeros(shape=nlines, dtype=float)
+    b = np.zeros(shape=nlines, dtype=str)
+    chrom = np.zeros(shape=nlines, dtype=str)
+    pos = np.zeros(shape=nlines, dtype=float)
+    strand = np.zeros(shape=nlines, dtype=str)
+    for i in range(nlines):
+        line = flines[i].strip().split()
+        mu[i] = float(line[0])
+        sd[i] = float(line[1])
+        start[i] = float(line[2])
+        n[i] = float(line[3])
+        b[i] = str(line[4])
+        chrom[i] = str(line[5]) ## can make this a single variable
+        pos[i] = float(line[6])
+        strand[i] = str(line[7]) ## can make this a single variable
+
+    return mu, sd, start, n, b, chrom, pos, strand
 
 
 def get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, uniform=False, rewrite_events=False, rewrite_name=False):
@@ -247,6 +318,96 @@ def get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, uniform=False, rewrite_
     return kmers, kmerdetected
 
 
+
+def get_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, kmer_pos=None, rewrite_events=False, rewrite_name=False):
+    '''
+    Different approach than get_kmer_dist().
+    Does not take average of all underlying events.
+    Only takes values from event at given position in kmer.
+    This is more like tombo - although tombo only takes median value for all values assigned to each genomic pos.
+    
+    mu = list of event means
+    sd = list of event SDs
+    start = list of event starts
+    n = list of event lengths
+    kmers = defaultdict that looks like {kmer:{mu:[], sd:[], n:[], ...}
+    nlines = number events in txt file
+    kmer_pos is the 0-indexed pos w/in the kmer that is used to grab data (like in tombo) - 
+    rewrite_events = Create file that contains the tombo events re-written w/ kmer instead of base.
+                    --> Note that information is lost at this step on the read ends
+    rewrite_name = name to give output file containing rewritten events.
+    '''
+    assert kmer_pos < k
+    ## will return 0 or 1 for if kmer was detected
+    kmerdetected = initiateReadDict(kmers.keys())
+    ##
+    if rewrite_events:
+        rwh = open(rewrite_name, 'w')
+    ##Calculate all windows
+    for i in range(nlines-k+1):
+        ## a. Identify kmer
+        mer = ('').join( [str(e) for e in b[i:i+k]] )
+        kmerdetected[mer] = 1
+        kmers = prepareDict(kmers, mer)
+        ## b. Append mean, sd, and num data points in kmer (given kmer pos) 
+        kmers[mer]['n'].append( n[i+kmer_pos] )
+        kmers[mer]['mu'].append( mu[i+kmer_pos] )
+        kmers[mer]['sd'].append( sd[i+kmer_pos] )
+        ## c. Optionally add kmer event to re-written events file.
+        if rewrite_events:
+            re_event = ('\t').join([str(e) for e in [mu[i+kmer_pos], sd[i+kmer_pos], start[i+kmer_pos], n[i+kmer_pos], mer]])
+            rwh.write(re_event + '\n')
+    if rewrite_events:
+        rwh.close()
+        
+    return kmers, kmerdetected
+
+
+
+def get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, kmer_pos=None, rewrite_events=False, rewrite_name=False):
+    '''
+    
+    '''
+    assert kmer_pos < k
+    ## will return 0 or 1 for if kmer was detected
+    kmerdetected = initiateReadDict(kmers.keys())
+    ##
+    if rewrite_events:
+        rwh = open(rewrite_name, 'w')
+    ##Calculate all windows
+    for i in range(nlines-k+1):
+        ## a. Identify kmer
+        mer = ('').join( [str(e) for e in b[i:i+k]] )
+        kmerdetected[mer] = 1
+        ## b. Identify genomic site
+        genomic_coords = chrom[i] + '_' + str(pos[i+kmer_pos]) + '_' + strand ## genomic position of kmer is not nec first base of kmer, it is the "central base"
+        kmers = prepareGenomicDict(kmers, mer, genomic_coords)
+        
+        ## c. Append mean, sd, and num data points in kmer (given kmer pos) 
+        kmers[mer][genomic_coords]['n'].append( n[i+kmer_pos] )
+        kmers[mer][genomic_coords]['mu'].append( mu[i+kmer_pos] )
+        kmers[mer][genomic_coords]['sd'].append( sd[i+kmer_pos] )
+        ##TODO____________________--------
+        ## c. Optionally add kmer event to re-written events file.
+        if rewrite_events:
+            re_event = ('\t').join([str(e) for e in [mu[i+kmer_pos], sd[i+kmer_pos], start[i+kmer_pos], n[i+kmer_pos], mer, chrom[i+kmer_pos], pos[i+kmer_pos], strand[i+kmer_pos]]])
+            rwh.write(re_event + '\n')
+    if rewrite_events:
+        rwh.close()
+
+    
+    return kmers, kmerdetected
+
+
+def convert_genomic_kmers_to_kmers(gkmers):
+    kmers = initiateDict()
+    for kmer in gkmers.keys():
+        kmers = prepareDict(kmers, kmer)
+        for genomic_coord in gkmers[kmer].keys():
+            for stat in ('mu', 'sd', 'n'):
+                kmers[kmer][stat].append( np.median( gkmers[kmer][genomic_coord][stat] ) )
+    return kmers
+    
 
 def get_stats(l):
     lnp = np.array(l, dtype=float)
@@ -337,35 +498,65 @@ if __name__ == "__main__":
 
         
     if args.uniform:
-        weighting = "_uniform"
+        weighting = "uniform"
+    elif args.weighted:
+        weighting = "weighted"
+    elif args.kmer_pos:
+        weighting = "kmerpos-k" + str(args.kmersize) + '-pos' + str(args.kmer_pos)
+    if args.genomic_approach:
+        approach = 'genomicKmerMedians'
     else:
-        weighting = "_weighted"
+        approach = 'allKmersFound'
     
-    k = args.kmersize 
-    MERS = get_all_kmers(k)    
-    kmers = initiateDict(MERS)
+    k = args.kmersize
+    kpos = args.kmer_pos
+    MERS = get_all_kmers(k)
+    if args.genomic_approach:
+        kmers = initiateGenomicDict(MERS)
+    else:
+        kmers = initiateDict(MERS)
     nreadsdict = initiateReadDict(MERS)
     
-    filelist = FileList(args.files, extension=args.extension, keep_tar_footprint_small=tarlite)
 
+
+
+    ## FOR EACH EVENTS TXT FILE, READ IN AND PROCESS KMER INFO
+    filelist = FileList(args.files, extension=args.extension, keep_tar_footprint_small=tarlite)
     for fh in filelist:
-        rewrite_name = args.outdir + ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + str(k) + "mers.txt"
+        rewrite_name = args.outdir + ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + weighting + '_' + str(k) + "mers.txt"
         ## READ IN AND ADD TO SUMMARY
         with open(fh, 'r') as f:
             flines = f.readlines()
         nlines = len(flines)
         if nlines > k:
-            mu, sd, start, n, b = get_events(flines, nlines)
-            # next step also does event re-writing to file inside function
-            kmers, kmerdetected = get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, args.uniform, args.rewrite, rewrite_name)
+            # get_kmer_pos step also does event re-writing to file inside function
+            if args.genomic_approach:
+                mu, sd, start, n, b, chrom, pos, strand = get_genomic_events(flines, nlines)
+                if args.uniform or args.weighted:
+                    pass
+                elif args.kmer_pos:
+                    kmers, kmerdetected = get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, args.kmer_pos, args.rewrite, rewrite_name)
+            else:
+                mu, sd, start, n, b = get_events(flines, nlines)
+                if args.uniform or args.weighted:
+                    kmers, kmerdetected = get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, args.uniform, args.rewrite, rewrite_name)
+                elif args.kmer_pos:
+                    kmers, kmerdetected = get_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, args.kmer_pos, args.rewrite, rewrite_name)
             if args.targzout and args.rewrite:
-                arcname = ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + str(k) + "mers.txt"
+                arcname = ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + weighting + '_' + str(k) + "mers.txt"
                 tarpit(tarchive, rewrite_name, arcname)
             for kmer, detected in kmerdetected.iteritems():
                 if detected:
                     nreadsdict[kmer] += 1
 
-    ## AFTER COLLECTING DIST FROM ALL FILES, OPTIONALLY COMPUTE STATS
+
+
+    ## AFTER COLLECTING KMER MU/SD/N DISTS FROM ALL FILES, IF GENOMIC APPROACH, THEN TAKE MEDIAN VALUE FOR EACH GENOMIC SITE
+    if args.genomic_approach:
+        kmers = convert_genomic_kmers_to_kmers(kmers)
+                    
+
+    ## AFTER COLLECTING KMER MU/SD/N DISTS FROM ALL FILES, OPTIONALLY COMPUTE STATS
     if not args.onlydist:
         #calculate stats
         kmerstats = initiateDict(kmers.keys())
@@ -377,17 +568,20 @@ if __name__ == "__main__":
             kmerstats[kmer]['mu'] = get_stats(kmers[kmer]['mu'])
             kmerstats[kmer]['sd'] = get_stats(kmers[kmer]['sd'])
             kmerstats[kmer]['n'] = get_stats(kmers[kmer]['n'])
+
+
+
             
     ## AFTER GETTING DIST VALS FROM FILES AND OPT COMPUTING STATS, OUTPUT DESIRED INFO
     if args.kmer_out_fprefix == 'stdout':
         ofh = sys.stdout
     if not args.onlydist and not (args.kmer_out_fprefix == 'stdout'):
-        mu_ofh = open(args.outdir + args.kmer_out_fprefix + weighting + '_mu_stats_for_' + str(k) + 'mers.out', 'w')
-        sd_ofh = open(args.outdir + args.kmer_out_fprefix + weighting + '_sd_stats_for_' + str(k) + 'mers.out', 'w')
+        mu_ofh = open(args.outdir + args.kmer_out_fprefix + '_' + weighting + '_mu_stats_for_' + str(k) + 'mers' + '_from_' + approach + '.out', 'w')
+        sd_ofh = open(args.outdir + args.kmer_out_fprefix + '_' + weighting + '_sd_stats_for_' + str(k) + 'mers' + '_from_' + approach + '.out', 'w')
         n_ofh = open(args.outdir + args.kmer_out_fprefix + '_n_stats_for_' + str(k) + 'mers.out', 'w')
     if (args.withdist or args.onlydist) and not (args.kmer_out_fprefix == 'stdout'):
-        mu_dist_ofh = open(args.outdir + args.kmer_out_fprefix + weighting + '_mu_dist_for_' + str(k) + 'mers.out', 'w')
-        sd_dist_ofh = open(args.outdir + args.kmer_out_fprefix + weighting + '_sd_dist_for_' + str(k) + 'mers.out', 'w')
+        mu_dist_ofh = open(args.outdir + args.kmer_out_fprefix + '_' + weighting + '_mu_dist_for_' + str(k) + 'mers' + '_from_' + approach + '.out', 'w')
+        sd_dist_ofh = open(args.outdir + args.kmer_out_fprefix + '_' + weighting + '_sd_dist_for_' + str(k) + 'mers' + '_from_' + approach + '.out', 'w')
         n_dist_ofh = open(args.outdir + args.kmer_out_fprefix + '_n_dist_for_' + str(k) + 'mers.out', 'w')
         
     for kmer in sorted(kmers.keys()):
@@ -427,13 +621,13 @@ if __name__ == "__main__":
                 mu_ofh.write(muout + '\n')
                 sd_ofh.write(sdout + '\n')
                 n_ofh.write(nout + '\n')
-                
-                mu_dist_out = ('\t').join( [kmer, mu_distlist] )
-                sd_dist_out = ('\t').join( [kmer, sd_distlist] )
-                n_dist_out = ('\t').join( [kmer, n_distlist] )
-                mu_dist_ofh.write(mu_dist_out + '\n')
-                sd_dist_ofh.write(sd_dist_out + '\n')
-                n_dist_ofh.write(n_dist_out + '\n')
+                if args.withdist:
+                    mu_dist_out = ('\t').join( [kmer, mu_distlist] )
+                    sd_dist_out = ('\t').join( [kmer, sd_distlist] )
+                    n_dist_out = ('\t').join( [kmer, n_distlist] )
+                    mu_dist_ofh.write(mu_dist_out + '\n')
+                    sd_dist_ofh.write(sd_dist_out + '\n')
+                    n_dist_ofh.write(n_dist_out + '\n')
 
     ## Close Files
     if args.kmer_out_fprefix != 'stdout':

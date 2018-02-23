@@ -1261,12 +1261,18 @@ class Fast5(object):
 
     def get_tombo_map_position(self):
         '''Must be a fast5 brought through tombo resquiggle/mapping process
-        Returns 4-tuple of chr, start, end, strand'''
+        Returns 10-tuple of chr, start, end, strand.....'''
         chrom = self.get_tombo_alignment_attribute('mapped_chrom')
         start = self.get_tombo_alignment_attribute('mapped_start')
         end = self.get_tombo_alignment_attribute('mapped_end')
         strand = self.get_tombo_alignment_attribute('mapped_strand')
-        return chrom, start, end, strand
+        n_match = self.get_tombo_alignment_attribute('num_matches')
+        n_mismatch = self.get_tombo_alignment_attribute('num_mismatches')
+        n_del = self.get_tombo_alignment_attribute('num_deletions')
+        n_ins = self.get_tombo_alignment_attribute('num_insertions')
+        clip_start = self.get_tombo_alignment_attribute('clipped_bases_start')
+        clip_end = self.get_tombo_alignment_attribute('clipped_bases_end')
+        return chrom, start, end, strand, n_match, n_mismatch, n_del, n_ins, clip_start, clip_end
 
     def get_tombo_map_position_string(self,delim='\t'):
         '''Must be a fast5 brought through tombo resquiggle/mapping process'''
@@ -1288,8 +1294,26 @@ class Fast5(object):
     def get_tombo_events_header_string(self): 
         return ("\t").join([str(e) for e in self.get_tombo_events_header()])
 
+    def get_tombo_genomic_events(self):
+        '''Must be a fast5 brought through tombo resquiggle/mapping process'''
+        chrom = self.get_tombo_alignment_attribute('mapped_chrom')
+        start = self.get_tombo_alignment_attribute('mapped_start')
+        end = self.get_tombo_alignment_attribute('mapped_end')
+        strand = self.get_tombo_alignment_attribute('mapped_strand')
+        events = self.get_tombo_events()
+        nevents = len(events)
+        assert nevents == start-end
+        genomic_events = []
+        for i in range(nevents):
+            pos = start + i ##starts out as i=0, so start+0
+            genomic_events.append( tuple(list(event) + [chrom, pos, strand]) )
+        return genomic_events
+
+    def get_tombo_genomic_events_string(self):
+        return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_tombo_genomic_events()])
         
-        
+    def get_tombo_genomic_events_header_string(self): 
+        return ("\t").join([str(e) for e in list(self.get_tombo_events_header()) + ['chr', 'pos', 'strand']])
 
 
 F5_TMP_DIR = ".fast5tools_tmp_dir"
