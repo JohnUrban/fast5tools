@@ -501,7 +501,7 @@ if __name__ == "__main__":
         weighting = "uniform"
     elif args.weighted:
         weighting = "weighted"
-    elif args.kmer_pos:
+    elif args.kmer_pos is not False:
         weighting = "kmerpos-k" + str(args.kmersize) + '-pos' + str(args.kmer_pos)
     if args.genomic_approach:
         approach = 'genomicKmerMedians'
@@ -534,14 +534,14 @@ if __name__ == "__main__":
                 mu, sd, start, n, b, chrom, pos, strand = get_genomic_events(flines, nlines)
                 if args.uniform or args.weighted:
                     pass
-                elif args.kmer_pos:
+                elif args.kmer_pos is not False:
 ##                                                                    (mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, kmer_pos=None, rewrite_events=False, rewrite_name=False):
                     kmers, kmerdetected = get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, args.kmer_pos, args.rewrite, rewrite_name)
             else:
                 mu, sd, start, n, b = get_events(flines, nlines)
                 if args.uniform or args.weighted:
                     kmers, kmerdetected = get_kmer_dist(mu, sd, start, n, b, k, kmers, nlines, args.uniform, args.rewrite, rewrite_name)
-                elif args.kmer_pos:
+                elif args.kmer_pos is not False:
                     kmers, kmerdetected = get_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, args.kmer_pos, args.rewrite, rewrite_name)
             if args.targzout and args.rewrite:
                 arcname = ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + weighting + '_' + str(k) + "mers.txt"
