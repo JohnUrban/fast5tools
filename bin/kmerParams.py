@@ -7,6 +7,11 @@ from collections import defaultdict
 import numpy as np
 
 
+##TODO:
+##Mar 2, 2018: genomic events currently written very redundantly w/ chr/pos/strand appended to all events. Could just add to the filenames in a regex searchable way.
+##Maybe some applications will benefit from current way -- but many downstream analyses would only need it in the filename.
+## Add this to filename for both approaches asap.
+
 #################################################
 ## Argument Parser
 #################################################
@@ -112,9 +117,22 @@ If using this approach, you need to provide genomic event text files as opposed 
 ''')
 
 
-parser.add_argument('--notarlite', action='store_true', default=False, help=''' Default method extracts 1 file from a given tarchive at a time, processes, and deletes it.
-This says to turn that off resulting in extracting entire tarchive before proceeding (and finally deleting).
-It is possible that --notarlite is faster, but at the expense of exceeding file number limits or disk storage quotas.''')
+parser.add_argument('--notarlite', action='store_true', default=False, help=''' The default methof (called tarlite) extracts 1 file from a given tarchive at a time, processes, and deletes it.
+This options says to turn tarlite off resulting in extracting entire tarchive before proceeding (and finally deleting).
+It is possible that --notarlite is faster, but at the expense of exceeding file number limits or disk storage quotas.
+Nonetheless, the difference in speed is a lot smaller than the difference in space needed.
+For example, not using tarlite will require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
+A corollary is that tarlite just needs to be allowed to form 1 (or a few) files compared to what could be thousands to millions.
+''')
+
+parser.add_argument('--tarlite', action='store_true', default=False, help='''This legacy option is outdated.
+However, it is kept here to avoid breaking pipelines that make use of it.
+The tarlite approach is now default. Specifying this will not change that default behavior.
+It will just prevent pipelines from breaking.
+However, not specifying this will still also result in the tarlite approach.
+Use --notarlite to turn it off.''')
+
 
 parser.add_argument('-T', '--targzout', type=str, default=False,
                     help='''Only relevant for --rewrite.
@@ -474,9 +492,9 @@ def get_stats(l):
 #################################################
 
 if __name__ == "__main__":
-    tarlite=True
-    if args.notarlite:
-        tarlite=False
+##    tarlite=True
+##    if args.notarlite:
+##        tarlite=False
 
         
     if args.outdir:
@@ -521,7 +539,7 @@ if __name__ == "__main__":
 
 
     ## FOR EACH EVENTS TXT FILE, READ IN AND PROCESS KMER INFO
-    filelist = FileList(args.files, extension=args.extension, keep_tar_footprint_small=tarlite)
+    filelist = FileList(args.files, extension=args.extension, keep_tar_footprint_small=(not args.notarlite))
     for fh in filelist:
         rewrite_name = args.outdir + ('.').join(os.path.basename(fh).split('.')[:-1]) + ".rewrite_as_" + weighting + '_' + str(k) + "mers.txt"
         ## READ IN AND ADD TO SUMMARY

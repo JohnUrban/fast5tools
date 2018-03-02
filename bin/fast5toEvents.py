@@ -83,11 +83,21 @@ If multiple fast5s are specified, they will be saved to files in the working dir
 This flag allows you to specify a different output directory.
 Filenames will be the the name of the fast5 file with .events.txt appended.''')
 
-parser.add_argument('--tarlite', action='store_true', default=False, help=''' This method extracts 1 file from a given tarchive at a time, processes, and deletes it.
-The older still-default routine extracts the entirety of all given tarchives at once, then processes files.
-The default method will therefore require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
+parser.add_argument('--notarlite', action='store_true', default=False, help=''' The default methof (called tarlite) extracts 1 file from a given tarchive at a time, processes, and deletes it.
+This options says to turn tarlite off resulting in extracting entire tarchive before proceeding (and finally deleting).
+It is possible that --notarlite is faster, but at the expense of exceeding file number limits or disk storage quotas.
+Nonetheless, the difference in speed is a lot smaller than the difference in space needed.
+For example, not using tarlite will require >2*tarchive amount of disk space (i.e. the tar.gz and its extracted contents).
 The tarlite method only requires the disk space already taken by the tarchive and enough for 1 additional file at a time.
-Tarlite may become the default method after some testing if it performs at similar speeds.''')
+A corollary is that tarlite just needs to be allowed to form 1 (or a few) files compared to what could be thousands to millions.
+''')
+
+parser.add_argument('--tarlite', action='store_true', default=False, help='''This legacy option is outdated.
+However, it is kept here to avoid breaking pipelines that make use of it.
+The tarlite approach is now default. Specifying this will not change that default behavior.
+It will just prevent pipelines from breaking.
+However, not specifying this will still also result in the tarlite approach.
+Use --notarlite to turn it off.''')
 
 
 
@@ -119,7 +129,7 @@ if args.outdir:
 #################################################
 
 if __name__ == "__main__":
-    f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
+    f5list = Fast5List(args.fast5, keep_tar_footprint_small=(not args.tarlite))
     if len(f5list) == 1: ## if only one f5, print to stdout
         for f5 in f5list:
             if f5.has_read(args.readtype):
