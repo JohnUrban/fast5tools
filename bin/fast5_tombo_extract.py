@@ -37,7 +37,7 @@ parser_get = parser.add_mutually_exclusive_group(required=True)
 parser_get.add_argument('--getmap', action='store_true', default=False, help='''Get map positions.''')
 parser_get.add_argument('--getevents', action='store_true', default=False, help='''Get tombo events.''')
 parser_get.add_argument('--getparams', action='store_true', default=False, help='''Get stored tombo parameters.''')
-
+parser_get.add_argument('--getgenomicevents', action='store_true', default=False, help='''Get genome-anchored tombo events.''')
 ##parser.add_argument('-r', '--readtype', default="mol",
 ##                   type= str, 
 ##                   help='''Choose type of fasta to get.
@@ -136,14 +136,21 @@ if __name__ == "__main__":
 
     f5list = Fast5List(args.fast5, keep_tar_footprint_small=args.tarlite)
     f5listlen = len(f5list)
+    only_one_file = f5listlen == 1
 
-    if f5listlen == 1 or args.getmap or args.getparams: ## If only 1 file to extract events from OR getting map positions or parameters for reads (which have readnames as a column in output), report to stdout 
+##    if f5listlen == 1 or args.getmap or args.getparams: ## If only 1 file to extract events from OR getting map positions or parameters for reads (which have readnames as a column in output), report to stdout 
+    if args.getmap or args.getparams: 
         for f5 in f5list:
             if f5.is_not_corrupt() and f5.is_nonempty and f5.tombo_exists():
                 if args.getmap and f5.tombo_aln_exists():
                     print f5.get_tombo_map_position_string() + '\t' + f5.filename
-                elif args.getevents and f5.tombo_events_exist():
-                    print f5.get_tombo_events_string() ## this needs to write to file when more than one f5
+                    ## No longer want to allow different behavior for 1 file vs many since this may have unintended effects
+##                elif (args.getevents or args.getgenomicevents) and f5.tombo_events_exist():
+##                    if args.getevents:
+####                        if args.
+##                        print f5.get_tombo_events_string() ## this needs to write to file when more than one f5
+##                    elif args.getgenomicevents:
+##                        print f5.get_tombo_genomic_events_string()
                 elif args.getparams and f5.tombo_params_exist():
                     if f5.tombo_successful():
                         print f5.filename + '\t' + f5.get_tombo_parameter_string() + '\t' + f5.get_tombo_parameter_header_string(',')
@@ -152,17 +159,24 @@ if __name__ == "__main__":
             else:
                 if not f5.tombo_exists():
                     print "No_Tombo_traces_found...\t" + f5.filename
-    elif f5listlen > 1:
+##    elif f5listlen > 1:
+    elif (args.getevents or args.getgenomicevents): #getevents or getgenomicevents
         ## Only matters when extracting events
         for f5 in f5list:
-            if args.getevents and f5.tombo_events_exist():
+            if f5.tombo_events_exist():
                 if args.header:
                     if args.headertable:
-                        print ("\t").join([f5.filename, f5.get_tombo_events_header()])
+                        if args.getevents:
+                            print ("\t").join([f5.filename, f5.get_tombo_events_header()])
+                        else: #assume genomic
+                            print ("\t").join([f5.filename, f5.get_tombo_genomic_events_header()])
                     else:
                         fn = args.outdir + f5.filebasename + ".tombo_events_headers.txt"
                         out = open(fn, 'w')
-                        out.write(f5.get_tombo_events_header_string())
+                        if args.getevents:
+                            out.write(f5.get_tombo_events_header_string())
+                        else:
+                            out.write(f5.get_tombo_genomic_events_header_string())
                         out.close()
                         if args.targzout:
                             arcfn = f5.filebasename + ".tombo_events_headers.txt"
@@ -171,8 +185,14 @@ if __name__ == "__main__":
                     fn = args.outdir + f5.filebasename + ".tombo_events.txt"
                     out = open(fn, 'w')
                     if args.withheader:
-                        out.write(f5.get_tombo_events_header_string())
-                    out.write(f5.get_tombo_events_string())
+                        if args.getevents:
+                            out.write(f5.get_tombo_events_header_string() + "\n")
+                        else:
+                            out.write(f5.get_tombo_genomic_events_header_string() + "\n")
+                    if args.getevents:
+                        out.write(f5.get_tombo_events_string())
+                    else:
+                        out.write(f5.get_tombo_genomic_events_string())
                     out.close()
                     if args.targzout:
                         arcfn = f5.filebasename + ".tombo_events.txt"

@@ -1302,18 +1302,21 @@ class Fast5(object):
         strand = self.get_tombo_alignment_attribute('mapped_strand')
         events = self.get_tombo_events()
         nevents = len(events)
-        assert nevents == start-end
+        assert nevents == end-start
         genomic_events = []
         for i in range(nevents):
             pos = start + i ##starts out as i=0, so start+0
-            genomic_events.append( tuple(list(event) + [chrom, pos, strand]) )
+            genomic_events.append( tuple(list(events[i]) + [chrom, pos, strand]) )
         return genomic_events
 
     def get_tombo_genomic_events_string(self):
         return ("\n").join([("\t").join((str(f) for f in e))  for e in self.get_tombo_genomic_events()])
-        
+
+    def get_tombo_genomic_events_header(self): 
+        return  list(self.get_tombo_events_header()) + ['chr', 'pos', 'strand']
+
     def get_tombo_genomic_events_header_string(self): 
-        return ("\t").join([str(e) for e in list(self.get_tombo_events_header()) + ['chr', 'pos', 'strand']])
+        return ("\t").join([str(e) for e in self.get_tombo_genomic_events_header()])
 
 
 F5_TMP_DIR = ".fast5tools_tmp_dir"

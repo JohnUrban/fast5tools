@@ -365,6 +365,7 @@ def get_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, kmer_pos=None, rewr
 
 
 def get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, kmer_pos=None, rewrite_events=False, rewrite_name=False):
+
     '''
     
     '''
@@ -380,7 +381,7 @@ def get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand,
         mer = ('').join( [str(e) for e in b[i:i+k]] )
         kmerdetected[mer] = 1
         ## b. Identify genomic site
-        genomic_coords = chrom[i] + '_' + str(pos[i+kmer_pos]) + '_' + strand ## genomic position of kmer is not nec first base of kmer, it is the "central base"
+        genomic_coords = str(chrom[i]) + '_' + str(pos[i+kmer_pos]) + '_' + str(strand) ## genomic position of kmer is not nec first base of kmer, it is the "central base"
         kmers = prepareGenomicDict(kmers, mer, genomic_coords)
         
         ## c. Append mean, sd, and num data points in kmer (given kmer pos) 
@@ -395,12 +396,11 @@ def get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand,
     if rewrite_events:
         rwh.close()
 
-    
     return kmers, kmerdetected
 
 
 def convert_genomic_kmers_to_kmers(gkmers):
-    kmers = initiateDict()
+    kmers = initiateDict(gkmers.keys())
     for kmer in gkmers.keys():
         kmers = prepareDict(kmers, kmer)
         for genomic_coord in gkmers[kmer].keys():
@@ -535,7 +535,8 @@ if __name__ == "__main__":
                 if args.uniform or args.weighted:
                     pass
                 elif args.kmer_pos:
-                    kmers, kmerdetected = get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, nlines, args.kmer_pos, args.rewrite, rewrite_name)
+##                                                                    (mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, kmer_pos=None, rewrite_events=False, rewrite_name=False):
+                    kmers, kmerdetected = get_genomic_kmer_pos_dist(mu, sd, start, n, b, k, kmers, chrom, pos, strand, nlines, args.kmer_pos, args.rewrite, rewrite_name)
             else:
                 mu, sd, start, n, b = get_events(flines, nlines)
                 if args.uniform or args.weighted:
