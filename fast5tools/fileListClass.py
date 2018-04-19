@@ -7,7 +7,7 @@ TMP_DIR = TMP_DIR[1:] ## not hdden for now
 class FileList(object):
     ## will parse list of information on files, expand FOFNs and Tarballs if necessary, etc
     ## then returns one filename at a time for program to do with as needed.
-    def __init__(self, filelist, extension, tar_filenames_only=False, keep_tar_footprint_small=True):
+    def __init__(self, filelist, extension, tar_filenames_only=False, keep_tar_footprint_small=True, downsample=False, random=False, randomseed=False):
         #extension is final 'word' of filename (best including final dot of filename, but not nec) -- e.g. .pdf, .txt, .bam
         #if empty string given, it will then look at all files
         # HOWEVER - with empty string, it will not perceive file.fofn and tarballs as special files to expand
@@ -16,7 +16,7 @@ class FileList(object):
                 self.filelist = filelist
         elif isinstance(filelist, str):
                 self.filelist = [filelist]
-        self.extension = extension
+        self.extension = tuple(extension) ## can give a single string or list/tuple
         self._tars_detected = False
         self.tar_filenames_only = tar_filenames_only
         self.keep_tar_footprint_small = keep_tar_footprint_small
@@ -29,6 +29,10 @@ class FileList(object):
         self.files = None
         self.iterfiles = None
         self.most_recent = None
+        ## Pre-process
+        self.downsample = downsample
+        self.random = random
+        self.randomseed = randomseed 
         self._extract_files()
         
     def __iter__(self):
@@ -138,6 +142,10 @@ class FileList(object):
                 pass
         self.nfiles = len(self.files)
         self.iterfiles = iter(self.files)
+        if self.downsample:
+            if self.random:
+                self.randomseed = self.randomseed if self.randomseed else randint(0,1000000)
+            self.down_sample_iter_files(n=self.downsample, random=self.random, randomseed=self.randomseed, sort=True)
 
     def get_file_list(self):
         return self.files
@@ -156,3 +164,23 @@ class FileList(object):
 
     def get_dirnames(self):
         return [os.path.dirname(e) for e in self.files]
+
+
+    def down_sample_iter_files(self, n=1, random=False, randomseed=False, sort=True):
+        if n >= self.nfiles or n <= 0 or n is None or n is False: ## no downsampling possible, return all
+            self.iterfiles =  iter(self.files)
+        else:
+            self.downsampled_files = self.files[:]
+            if random:
+                if randomseed:
+                    seed(randomseed)
+                shuffle(self.downsampled_files)
+            self.downsampled_files = self.downsampled_files[:n]
+            if sort:
+                ## Just trying to return the sampled, potentially random list as sorted
+                self.downsampled_files = sorted(self.downsampled_files)
+            #print self.downsampled_files
+            self.iterfiles =  iter(self.downsampled_files)
+
+    def reset_iter_files(self):
+        self.iterfiles =  iter(self.files)
