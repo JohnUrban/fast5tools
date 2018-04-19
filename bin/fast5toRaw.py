@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 import h5py, os, sys
 import cStringIO as StringIO
@@ -19,7 +19,7 @@ Given path(s) to fast5 file(s) and/or directories of fast5s, return raw data poi
 Be careful. This will only work on recent fast5 file versions that provide raw data.
 
 
-John Urban (2015, 2016, 2017)
+John Urban (2015, 2016, 2017, 2018)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 
