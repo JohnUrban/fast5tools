@@ -428,23 +428,17 @@ def meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
 
 ## Fast5List OPs
 ## The function below allows one to sample from the Fast5List
+## I just tucked this inside Fast5List class though, so it may not be needed.
+## Also I did away with pre-shuffling and selection as that can create unintended weighting schemes when sampling
 ## get_fast5_list(args.nfiles, args.fast5, args.random, args.randomseed, args.notarlite, filemode='r', sort=True)
 def get_fast5_list(nfiles, initial_list, random=False, randomseed=False, notarlite=False, filemode='r', sort=True):
-    if nfiles <= 0:
-        nfiles = len(initial_list)
-    if random:
-        if randomseed:
-            seed(randomseed) ## This seed will only make things reproducible given same exact conditions - seed not re-used later.
-        shuffle(initial_list) ## This only shuffles initial targets, not final files -- but can help simplify target expansion
-
-    # Downsample as necessary
-    initial_list_ds = initial_list[:nfiles] ## This only shrinks number of targets to simplify target expansion
-    
     # Expand targets to get initial list
-    f5list = Fast5List(initial_list_ds, keep_tar_footprint_small=(not notarlite), filemode=filemode)
+    f5list = Fast5List(initial_list, keep_tar_footprint_small=(not notarlite), filemode=filemode)
+    f5list.down_sample_iter_files(n=nfiles, random=random, randomseed=randomseed, sort=True)
 
     ## Take from expanded list: Shuffling and Downsampling actually happens here on indiv fast5s
-    return f5list.get_sample(n=nfiles, random=random, sort=sort)
+    #return f5list.get_sample(n=nfiles, random=random, sort=sort)
+    return f5list
 
 
 

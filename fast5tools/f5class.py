@@ -5,7 +5,7 @@ import h5py, os, sys, tarfile, shutil
 import cStringIO as StringIO
 from Bio import SeqIO
 from glob import glob
-from random import randint, shuffle
+from random import randint, shuffle, seed
 import numpy as np
 
 #logging
@@ -1634,7 +1634,7 @@ class Fast5(object):
 F5_TMP_DIR = ".fast5tools_tmp_dir"
 F5_TMP_DIR = "fast5tools_tmp_dir"
 class Fast5List(object):
-    def __init__(self, fast5list, tar_filenames_only=False, keep_tar_footprint_small=True, filemode='r'):
+    def __init__(self, fast5list, tar_filenames_only=False, keep_tar_footprint_small=True, filemode='r', downsample=False, random=False, randomseed=False):
         #ensure type is list
         if isinstance(fast5list, list):
                 self.fast5list = fast5list
@@ -1645,11 +1645,16 @@ class Fast5List(object):
         self.tar_filenames_only = tar_filenames_only
         self.keep_tar_footprint_small = keep_tar_footprint_small
         self.nfiles = None
-        self.allfiles = None
+        #self.allfiles = None
+        self.iterfiles = None
         self.n_tars = 0
         self.F5_TMP_DIR = None
         self.tars = {} ## for small footprint method
 ##        self._expand_list() ##TODO(?) - make expand fofn optional, so not wasting time in most situations
+        ## Pre-process
+        self.downsample = downsample
+        self.random = random
+        self.randomseed = randomseed 
         self._extract_fast5_files()
 
         
@@ -1659,7 +1664,8 @@ class Fast5List(object):
 
     def next(self):
         try:
-            newfile = self.allfiles.next()
+            #newfile = self.allfiles.next()
+            newfile = self.iterfiles.next()
             if self.keep_tar_footprint_small and newfile.startswith("f5tar|"):
                     f5tar, key, tar_member = newfile.split("|")
                     tarkey = "f5tar|" + key + "|"
@@ -1797,7 +1803,12 @@ class Fast5List(object):
             else: ## all else currently ignored by fast5tools
                 pass
         self.nfiles = len(self.files)
-        self.allfiles = iter(self.files)
+        #self.allfiles = iter(self.files)
+        self.iterfiles =  iter(self.files)
+        if self.downsample:
+            if self.random:
+                self.randomseed = self.randomseed if self.randomseed else randint(0,1000000)
+            self.down_sample_iter_files(n=self.downsample, random=self.random, randomseed=self.randomseed, sort=True)
 
     def __len__(self):
         return self.nfiles
@@ -1814,7 +1825,9 @@ class Fast5List(object):
     def get_dirnames(self):
         return [os.path.dirname(e) for e in self.files]
 
+
     def get_sample(self, n=1, random=False, sort=True):
+        ## This is used w/ a function called get_fast5_list in f5ops
         files = self.files[:]
         if random:
             shuffle(files)
@@ -1822,6 +1835,25 @@ class Fast5List(object):
         if sort:
             files = sorted(files) ## Just trying to return the sampled, potentially random list as sorted
         return Fast5List(files)
+
+    def down_sample_iter_files(self, n=1, random=False, randomseed=False, sort=True):
+        if n >= self.nfiles or n <= 0 or n is None or n is False: ## no downsampling possible, return all
+            self.iterfiles =  iter(self.files)
+        else:
+            self.downsampled_files = self.files[:]
+            if random:
+                if randomseed:
+                    seed(randomseed)
+                shuffle(self.downsampled_files)
+            self.downsampled_files = self.downsampled_files[:n]
+            if sort:
+                ## Just trying to return the sampled, potentially random list as sorted
+                self.downsampled_files = sorted(self.downsampled_files)
+            #print self.downsampled_files
+            self.iterfiles =  iter(self.downsampled_files)
+
+    def reset_iter_files(self):
+        self.iterfiles =  iter(self.files)
 
 
 
