@@ -189,7 +189,6 @@ if __name__ == "__main__":
     filesused = ''
 
     ## Iterate over fast5s
-    #for f5 in get_fast5_list(args.nfiles, args.fast5, args.random, args.randomseed, args.notarlite, filemode='r', sort=True):
     for f5 in  Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite), filemode='r', downsample=args.nfiles, random=args.random, randomseed=args.randomseed):
         if meets_all_criteria(f5, args.readtype, args.minlen, args.maxlen, args.minq, args.maxq):
             filesused += f5.abspath + '\n'
