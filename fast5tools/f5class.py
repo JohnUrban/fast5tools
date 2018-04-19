@@ -1,11 +1,11 @@
-## JOHN URBAN (2015, 2016)
+## JOHN URBAN (2015, 2016, 2017, 2018)
 
 #info
 import h5py, os, sys, tarfile, shutil
 import cStringIO as StringIO
 from Bio import SeqIO
 from glob import glob
-from random import randint
+from random import randint, shuffle
 import numpy as np
 
 #logging
@@ -113,7 +113,8 @@ TOMBO_ALN=TOMBO_BC + 'Alignment/'
 TOMBO_EVENTS=TOMBO_BC+'Events/'
 
 class Fast5(object):
-    def __init__(self, filename):
+    def __init__(self, filename, filemode='r'):
+        self.filemode = filemode
         self.filename = filename
         self.filebasename = (".").join(filename.split("/")[-1].split(".")[:-1]) ## takes entire basename except ".fast5"
         self.abspath = os.path.abspath(filename)
@@ -155,7 +156,7 @@ class Fast5(object):
         Open an ONT Fast5 file, assuming HDF5 format
         """
         try:
-            self.f5 = h5py.File(self.filename, 'r') 
+            self.f5 = h5py.File(self.filename, self.filemode) 
             return True
         except Exception, e:
 ##            sys.stderr.write("Cannot open file: %s \n" % self.filename)
@@ -182,6 +183,7 @@ class Fast5(object):
 ##        return self.f5['/'].attrs['file_version']
 
     def get_file_version(self):
+        ''''''
         if self.file_version is None:
             try:
                 track_version = self.get_tracking_version()
@@ -212,7 +214,24 @@ class Fast5(object):
         """
         if self.is_open:
             self.hdf5file.close()
-    
+            
+    def get_all_attributes(self):
+        self.all_attrs = ''
+        def get_attributes(name, obj):
+            out = ''
+            for key, val in obj.attrs.iteritems():
+                out += name + "/%s\t%s" % (key, val) + '\n'
+            if not out:
+                self.all_attrs += name + '\t' + 'no_attributes\n'
+            else:
+                self.all_attrs += name + '\t' + 'has_attributes\n'
+                self.all_attrs += out
+            
+        self.f5.visititems(get_attributes)
+        #all_attrs = self.all_attrs
+        #del self.all_attrs
+        return self.all_attrs
+        
     def basecalling_attempted(self):
         detected = 0
         try:
@@ -321,6 +340,8 @@ class Fast5(object):
             return False
         
     def has_read(self, readtype):
+##        if readtype in ('molecule'): ##adding this in various spots of file on Apr19,2018 - fingers crossed it doesn't break older stuff; alt strat is to convert readtype in script
+##            readtype = self.use_molecule()
         return self._has_read[readtype]
 
     def has_reads(self):
@@ -431,6 +452,8 @@ class Fast5(object):
     def _get_attr_path(self, readtype):
         '''readtpye in 2d, template, complement'''
         if self._basecalling_attempted:
+##            if readtype in ('molecule'):
+##                readtype = self.use_molecule()
             if self.ATTR_2D == None:
                 self._find_attr_path()
             if readtype == "2d":
@@ -466,11 +489,15 @@ class Fast5(object):
 
     def get_mean_qscore(self, readtype):
         '''readtpye in 2d, template, complement'''
+##        if readtype in ('molecule'):
+##            readtype = self.use_molecule()
         return self._get_attr(path = self._get_attr_path(readtype), attr = "mean_qscore")
 
 
     def get_seq_len(self, readtype):
         '''readtpye in 2d, template, complement'''
+##        if readtype in ('molecule'):
+##            readtype = self.use_molecule()
         return self._get_attr(path = self._get_attr_path(readtype), attr = "sequence_length")
 
 
@@ -874,6 +901,7 @@ class Fast5(object):
         return self.get_quals(readtype, name=self.filebasename, comments=comments)
 
     ## NOTE: did not add the abs path (or filename) options for thing below -- Add if needed.
+    ## ALT STRATEGY FOR QUAL CONVERSION: qscores = [(ord(q)-33) for q in fq.qual]
     def get_quals_as_int(self, readtype):
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
@@ -943,7 +971,6 @@ class Fast5(object):
             return self.f5[self._get_location_path(which,"Events")].attrs["start_time"]
         else:
             return self.get_event_start_times(readtype)[index]
-
 
     def get_events(self, readtype):
         ## Nov 2017: 'input' breaks this in latest files
@@ -1102,7 +1129,7 @@ class Fast5(object):
     def get_raw_signal(self, median_normalized=False, scale=100.0):
         if median_normalized:
             raw = self.f5[self.get_raw_signal_path()][()]
-            median = np.median(raw)
+            median = np.median(raw) ## need to update this by subtracting out MAD
             return scale*raw/median
         else:
             return self.f5[self.get_raw_signal_path()][()]
@@ -1318,16 +1345,302 @@ class Fast5(object):
     def get_tombo_genomic_events_header_string(self): 
         return ("\t").join([str(e) for e in self.get_tombo_genomic_events_header()])
 
+    def get_sampling_rate(self):
+        return self.f5['/UniqueGlobalKey/channel_id/'].attrs['sampling_rate']
+
+    def convert_sampling_time_length_to_number_of_data_points(self,readtype="template", length=None):
+        ''' Older versions of minION reported the event length as the length of time the event was in seconds -- typically << 1 second/event.
+            Newer versions report event lengths as the number of raw data points comprising the event.
+            This will try to detect what length is reported.
+            If number of data points is found as the length, it is returned as is.
+            If length of time is found, it multiplies it by the sampling rate and rounding to the nearest integer to approximate the number of datapoints.'''
+        assert readtype is None or length is None
+        if readtype is not None and length is None:
+            length = self.get_event_lengths(readtype)
+        if length.dtype in (np.uint64, np.int64) and length[:5].mean() > 1:
+            return length
+        elif length.dtype == np.float64 and length[:5].mean() < 1:
+            return np.array( np.rint(length * self.get_sampling_rate()), dtype = 'uint64')
+        
+    def simulate_raw_data_from_events(self, readtype="template", dtype='float16', from_input_events=True, add_flanking_signal=False, hairpin_flank=5):
+        ''' Latest data is 1D/template-only.
+            Earlier data had different models for template and complent.
+            Moreover, complement technically had 2 models.
+            Therefore, I recommend just doing this on template events and template models.
+            dtype in int16, float64, float16
+            It is int16 in latest files, but default here is float16.
+            Can change it to int16 as needed.
+            This takes events from input by default.'''
+##        events = get_strand_events_from_input_events(strand, add_flanking_events, hairpin_flank)
+        if from_input_events:
+            events = self.get_strand_events_from_input_events(strand=readtype, add_flanking_events=add_flanking_signal, hairpin_flank=hairpin_flank)
+            try:
+                events['stdv']
+            except:
+                if events['variance']:
+                    events['stdev'] = events['var']**0.5
+            events['length'] = self.convert_sampling_time_length_to_number_of_data_points(readtype=None, length=events['length'])
+
+        else: #basecaled events
+            ## I did not yet implement adding flanking input events to the basecalled events
+            events = {}
+            events['mean'] = self.get_event_means(readtype)
+            events['stdv'] = self.get_event_stdevs(readtype)
+            events['length'] = self.convert_sampling_time_length_to_number_of_data_points(readtype)
+        nevents = len(events['mean'])
+        raw = []
+        for i in range(nevents):
+            raw += list( np.random.normal(events['mean'][i], events['stdv'][i], events['length'][i]) )
+##        if asint16:
+##            dtype = 'int16'
+        return np.array(raw, dtype=dtype)
+
+
+    
+
+    def add_simulated_raw_data_f5(self, readtype="template", dtype='float16', force=False, from_input_events=True, add_flanking_signal=False, hairpin_flank=5):
+        ''' from_input_events defaults to True b/c the basecaller used to trim events out meaning the raw signal would not be fully represented.
+                setting it to False results in using the basecalled_events, which may or may not be better for an application.
+            Add flanking signal: if template, add signal from events leading up to first template event.
+                                    if no 2d or complement is detected, it tries to add any events after the template event end.
+                                    Otherwise, it will add the number of events given by hairpin_flank.
+                                 if complement, it will prepend the number of events defined by hairpin_flank,
+                                    and will try to add any events following complement end.'''
+        rawpath = self.get_raw_path()
+        rawsigpath = self.get_raw_signal_path()
+        if rawsigpath in self.f5 and not force:
+            print rawpath, "already exists. Exiting..."
+            quit() ## Since this will be working on numerous reads, maybe just catch and report but keep going
+        readnum = str(self.get_read_number())
+        if not 'Raw' in self.f5:
+            g1 = self.f5.create_group('Raw')
+        if not 'Raw/Reads' in self.f5:
+            g2 = self.f5.create_group('Raw/Reads')
+        if not rawpath in self.f5:
+            g3 = self.f5.create_group(rawpath)
+        if not rawsigpath in self.f5:
+            ## need to add these attrs: [u'read_number', u'read_id', u'start_mux', u'start_time', u'duration', u'median_before']
+##            g4 = self.f5.create_group(rawsigpath)
+            raw = self.simulate_raw_data_from_events(readtype=readtype, dtype=dtype, from_input_events=from_input_events, add_flanking_signal=add_flanking_signal, hairpin_flank=hairpin_flank)
+            duration = len(raw)
+            self.f5.create_dataset(rawpath+'/Signal',data=raw, compression="gzip", compression_opts=1) #, maxshape=None)
+            self.f5[rawpath].attrs['duration'] = duration
+            self.f5[rawpath].attrs['read_number'] = int(readnum.split('_')[-1])
+            self.f5[rawpath].attrs['read_id'] = self.get_read_id()
+            self.f5[rawpath].attrs['simulated'] = True
+        if rawsigpath in self.f5 and force:
+            if self.f5[rawpath].attrs['simulated']: #only overwrite sim
+                del self.f5[rawpath+'/Signal']
+                raw = self.simulate_raw_data_from_events(readtype=readtype, dtype=dtype, from_input_events=from_input_events, add_flanking_signal=add_flanking_signal, hairpin_flank=hairpin_flank)
+                self.f5[rawpath+'/Signal'] = raw
+
+            self.f5[rawpath].attrs['simulated'] = True
+        if not '/Analyses/Basecall_1D_000/BaseCalled_'+readtype+'/Events' in self.f5 and '/Analyses/Basecall_2D_000/BaseCalled_'+readtype+'/Events' in self.f5:
+            self.f5['/Analyses/Basecall_1D_000/BaseCalled_'+readtype+'/Events'] = h5py.SoftLink('/Analyses/Basecall_2D_000/BaseCalled_'+readtype+'/Events')
+            self.f5['/Analyses/Basecall_1D_000/BaseCalled_'+readtype+'/Fastq'] = h5py.SoftLink('/Analyses/Basecall_2D_000/BaseCalled_'+readtype+'/Fastq')
+        
+        ## for current error w/ event_resquiggle look in: https://github.com/nanoporetech/tombo/blob/master/tombo/_event_resquiggle.py
+           # resquiggle_read
+           # find_read_start
+        ## add the 5' events and 3' events up to hairpin or otherwise
+        ## Tombo will try to get a better starting point in the raw data
+
+
+
+
+
+
+    ## The following will definitely work for R7.3, maybe not after (definitely not 2D stuff, as 1D only now) - adapted from my older poreminion stuff
+    def get_2d_align_len(self):
+        return self.f5['/Analyses/Basecall_2D_000/Summary/hairpin_align/alignment_length']
+
+    def get_2d_align_score(self):
+        return self.f5['/Analyses/Basecall_2D_000/Summary/hairpin_align/alignment_score']
+
+    def get_strand_start_index_in_input_events(self, strand="template"):
+        if self.get_file_version() < 0.6: ## I have this setup to try to collapse most of the <=r7.3 files to version=0
+            if strand == "template":
+                return self.f5['/Analyses/Basecall_2D_000/Summary/split_hairpin/'].attrs['start_index_temp']
+            elif strand == "complement":
+                return self.f5['/Analyses/Basecall_2D_000/Summary/split_hairpin/'].attrs['start_index_comp']
+        else: ## likely 1D only, as these were def at 0.6
+            return False ## There are no input events anymore... just raw signal and the 1d temp events
+
+    def get_strand_end_index_in_input_events(self, strand="template"):
+        if self.get_file_version() < 0.6: ## I have this setup to try to collapse most of the <=r7.3 files to version=0
+            if strand == "template":
+                return self.f5['/Analyses/Basecall_2D_000/Summary/split_hairpin/'].attrs['end_index_temp']
+            elif strand == "complement":
+                return self.f5['/Analyses/Basecall_2D_000/Summary/split_hairpin/'].attrs['end_index_comp']
+        else: ## likely 1D only, as these were def at 0.6
+            return False ## There are no input events anymore... just raw signal and the 1d temp events
+
+    def get_strand_coords_from_input_events(self, strand='template', add_flanking_events=False, hairpin_flank=5):
+        '''Give both start and end indexes of given strand.
+            Optionally add extra input events to the flanks:
+                if template, add events leading up to first template event.
+                    if no 2d or complement is detected, it tries to add any events after the template event end.
+                   Otherwise, it will add the number of events given by hairpin_flank.
+                if complement, it will prepend the number of events defined by hairpin_flank,
+                   and will try to add any events following complement end.'''
+        start = self.get_strand_start_index_in_input_events(strand)
+        end = self.get_strand_end_index_in_input_events(strand)
+        if add_flanking_events:
+            if strand is 'template':
+                start = 0
+                if self.has_2d() or self.has_complement():
+                    end += 5
+                else:
+                    end = self.get_num_events('input')
+            elif strand is 'complement':
+                start -= 5
+                end = self.get_num_events('input')
+        return start, end
+
+    def get_strand_events_from_input_events(self, strand='template', add_flanking_events=False, hairpin_flank=5):
+        '''Instead of giving template or complement events, give the events
+            that correspond to template or complement from the input events
+            as defined by their start and end indexes therein.
+            '''
+        start, end = self.get_strand_coords_from_input_events(strand, add_flanking_events, hairpin_flank)
+        return self.get_events(readtype='input')[start:end]
+
+
+    def get_strand_events_from_basecalled_events(self, strand='template', add_flanking_events=False, hairpin_flank=5):
+    ## Stopped doing this for the moment b/c an issue arises when input and basecalled events have different structuress and keys
+    ##  Just need to grab only the mean, stdev, start, length from each
+    ##  This is NOT tested.
+        '''This simply returns the events from the strand given if add_flanking_events is False
+            Otherwise, it returns the basecalled strand events (assuming file is basecalled) with
+                flanking events taking from input events that flank the start and end positions
+                of the basecalled events.
+            '''
+        def get_stdev(given_events,b=None,e=None):
+            if b is None:
+                b = 0
+            if e is None:
+                e = length(given_events['mean'])
+            try:
+                return  given_events['stdv'][b:e]
+            except:
+                return  given_events['variance'][b:e]**0.5
+        bc_start = self.get_strand_start_index_in_input_events(strand)
+        bc_end = self.get_strand_end_index_in_input_events(strand)
+        i_start, i_end = self.get_strand_coords_from_input_events(strand, add_flanking_events, hairpin_flank)
+        bc_events = self.get_events(readtype=strand)
+        i_events = self.get_events(readtype='input')
+        events = {}
+        events['mean'] = np.array(list(i_events['mean'][i_start:bc_start]) + list(bc_events['mean']) + list(i_events['mean'][bc_end:i_end]))
+        events['stdev'] = np.array(list(get_stdev(i_events, i_start, bc_start)) + list(get_stdev(bc_events)) + list(get_stdev(i_events, bc_end, i_end)))
+        events['length'] = list(self.convert_sampling_time_length_to_number_of_data_points(readtype=None, length=i_events['length'][i_start:bc_start]))
+        events['length'] += list(self.convert_sampling_time_length_to_number_of_data_points(readtype=None, length=bc_events['length']))
+        events['length'] += list(self.convert_sampling_time_length_to_number_of_data_points(readtype=None, length=i_events['length'][bc_end:i_end]))
+        events['length'] = np.array(events['length'])
+        return events
+            
+
+    def reconstruct_sequence_from_stranded_events(self, readtype="template"):
+        ## assumes events are stranded/base-called
+        events = self.get_events(readtype)
+        length = len(events['mean'])
+        seq = events['model_state'][0]
+        for i in range(1,length):
+            if events['move'][i] > 0:
+                #print events['move'][i] 
+                seq += events['model_state'][i][5-int(events['move'][i]):]
+        return seq
+
+    def map_events_to_read(self, readtype):
+        ## assumes events are stranded/base-called
+        ## updates events dict with seqindex key:value pairs
+        ## i.e. for template, this returns the index in the template sequence for each event
+        ##   (where the model state kmer starts in the sequence)
+        events = self.get_events(readtpye)
+        length = len(events['mean'])
+        seqindex = [0]
+        for i in range(1,length):
+            #pos of this event in the read sequence is pos of last event + the move value
+            seqindex.append(seqindex[-1] + int(events['move'][i]))
+        return seqindex
+
+
+    def map_events_to_reference(self, readtype="template"):
+        # by mapping the events to the read and the read to the reference,
+        #    one can map the events to the reference given the CIGAR.
+        # Can accomplish this by either storing alignments in fast5 like Tombo,
+        #     then adding a lot of the samclass functionality to f5class
+        #     or making samclass able to take in a fast5class object to find its SAM stuff
+        #     or can just map reads with location-comments appended to SAM entry,
+        #        then go through the sorted SAM with samclass to get all associated alignments
+        ##       as well as the location to look up events in fast5
+        ##    or can also have events in the SAM comment and do it all in the samclass
+        pass
+
+    def map_stay_events_to_read(self, readtype="template"):
+        ## assumes events are stranded/base-called
+        ## makes BED entries of locations of kmers that have move=0
+        ## it will record the same location as many times as there are stays at it
+        ## by default position 0 is move 0 but is not a "stay", so start at 1
+        ## name can be filepath, readstats, etc
+        events = self.get_events(readtpye)
+        length = len(events['mean'])
+        index = 0
+        stay_indexes = []
+        for i in range(1,length):
+            if events['move'][i] == 0:
+                stay_indexes.append( index )
+            else:
+                index += int(events['move'][i])
+                
+    def map_stay_events_to_reference(self, readtype="template"):
+        ## 
+        pass
+
+
+    def map_segmented_raw_signal_to_read(self, readtype="template",mediannorm=False):
+        ## rather than return index for every event,
+        ##  simply return kev values of index:numRawData
+        ##  ...but this is simply index:eventlength
+        ##  ...thus can just look at event_indexes:event_lengths.
+        ##  So this function might as well give event_index:raw_data_group
+        ##  Aligning raw data to read or ref guided by events is like Tombo's event_resquiggle
+        ##  The alternative is simply getting the genomic window and aligning the raw data de novo with HMM, RNN, or other.
+        raw = self.get_segmented_raw_signal(readtype, mediannorm)
+        pass
+
+    def map_segmented_raw_signal_to_reference(self, readtype="template"):
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 F5_TMP_DIR = ".fast5tools_tmp_dir"
 F5_TMP_DIR = "fast5tools_tmp_dir"
 class Fast5List(object):
-    def __init__(self, fast5list, tar_filenames_only=False, keep_tar_footprint_small=True):
+    def __init__(self, fast5list, tar_filenames_only=False, keep_tar_footprint_small=True, filemode='r'):
         #ensure type is list
         if isinstance(fast5list, list):
                 self.fast5list = fast5list
         elif isinstance(fast5list, str):
                 self.fast5list = [fast5list]
+        self.filemode = filemode
         self._tars_detected = False
         self.tar_filenames_only = tar_filenames_only
         self.keep_tar_footprint_small = keep_tar_footprint_small
@@ -1355,7 +1668,7 @@ class Fast5List(object):
                     f5 = Fast5(newfile)
                     os.remove(newfile)
             else:
-                f5 = Fast5(newfile)
+                f5 = Fast5(newfile, filemode=self.filemode)
             return f5
         
         except Exception as e:
@@ -1501,8 +1814,14 @@ class Fast5List(object):
     def get_dirnames(self):
         return [os.path.dirname(e) for e in self.files]
 
-
-
+    def get_sample(self, n=1, random=False, sort=True):
+        files = self.files[:]
+        if random:
+            shuffle(files)
+        files = files[:n]
+        if sort:
+            files = sorted(files) ## Just trying to return the sampled, potentially random list as sorted
+        return Fast5List(files)
 
 
 
