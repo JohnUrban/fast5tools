@@ -3,6 +3,8 @@
 import h5py, os, sys
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
+from fast5tools.helperops import process_outdir
+from fast5tools.plotops import update_qualpos, qualposplot
 import argparse
 from glob import glob
 from collections import defaultdict
@@ -155,104 +157,28 @@ args = parser.parse_args()
 #################################################
 ##
 #################################################
-def define_read_type(f5, readtype):
-        if readtype in ('molecule'):
-            return f5.use_molecule()
-        else:
-            return readtype
 
-def meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
-    if f5.is_not_corrupt() and f5.is_nonempty():
-        readtype = define_read_type(f5, readtype)
-        if f5.has_read(readtype):
-            if f5.get_seq_len(readtype) >= minlen and f5.get_seq_len(readtype) <= maxlen:
-                if f5.get_mean_qscore(readtype) >= minq and f5.get_mean_qscore(readtype) <= maxq:
-                    return True
-    else:
-        return False
-
-
-def update_qualpos(quals, qualpos, bin_width=1000, zscores=False, robust=False):
-    ''' returns dictionary with keys=positions, values=lists of qual scores for that position
-    qualpos = defaultdict(list)
-    zpos = defaultdict(list)
-    bin_width = integer
-    '''
-    if zscores or robust:
-        if robust:
-            qmean = np.median(quals)
-            qSD = np.median( abs( np.array(quals) - qmean ) )
-        else:
-            qmean = np.mean(quals)
-            qSD = np.std(quals)
-    ctr = 0
-    for q in quals:
-        ctr += 1
-        if zscores or robust:
-            qualpos[1+int(ctr//bin_width)].append((q-qmean)/qSD) ## Extra 1 is to put in 1-based pos
-        else:
-            qualpos[1+int(ctr//bin_width)].append(q)  ## This is collecting information for bins default 1 kb
-    return qualpos
-
-
-def qualposplot(qualpos, bin_width, zscores=False, robust=False, filename=None):
-    if zscores:
-        ylab = "Quality Z-score"
-        plotout = "qualZscore-Vs-pos"
-    elif robust:
-        ylab = "Robust Quality Z-score"
-        plotout = "robustQualZscore-Vs-pos"
-    else:
-        ylab = "Quality score"
-        plotout = "qual-Vs-pos"
-    if qualpos.keys():
-        data = [qualpos[e] for e in sorted(qualpos.keys())]
-        plt.boxplot(data)
-        xdetail = " (" + str(bin_width) + " bp bins)"
-        plt.xlabel("Bin number in read" + xdetail)
-        plt.ylabel(ylab)
-        plt.xticks(rotation=65, fontsize=8)
-    else:
-        sys.stderr.write("No reads that meet criteria: cannot construct quality-Zscore  vs. position scatter plot...\n")
-    if filename is not None:
-        try:
-            plt.savefig(filename)
-            plt.close()
-        except:
-            sys.stderr.write("Unrecognized extension for %s!\nTry .pdf or .jpg or .png \n" % (plot_file))
-
-    else:
-            plt.show()
 
 
 if __name__ == "__main__":
     
     # Process Args
-    if not args.outdir.endswith('/'):
-        args.outdir += '/'
-    if not os.path.exists(args.outdir):
-        os.system('mkdir ' + args.outdir)
-    if args.filename is not None:
-        filesused_h = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
-    if args.nfiles <= 0:
-        args.nfiles = len(args.fast5)
-    if args.random:
-        if args.randomseed:
-            seed(args.randomseed) ## This seed will only make things reproducible given same exact conditions - seed not re-used later.
-        shuffle(args.fast5) ## This only shuffles initial targets, not final files -- but can help simplify target expansion
-
-    # Downsample as necessary
-    args.fast5 = args.fast5[:args.nfiles] ## This only shrinks number of targets to simplify target expansion
+    process_outdir(args.outdir)
     
-    # Expand targets to get initial list
-    f5list = Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite), filemode='r')
-
+    if args.filename is not None:
+        filesused_h_ = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
+        filesused_h = args.outdir + filesused_h_ if args.outdir.endswith('/') else args.outdir + '/' + filesused_h_
+        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename
+    else:
+        outfile = None
+        
     # Initialize
     qualpos = defaultdict(list)
     filesused = ''
 
+
     ## Iterate over fast5s
-    for f5 in f5list.get_sample(n=args.nfiles, random=args.random, sort=True): ## shuffling and downsampling actually happen here on indiv fast5s
+    for f5 in get_fast5_list(args.nfiles, args.fast5, args.random, args.randomseed, args.notarlite, filemode='r', sort=True):
         if meets_all_criteria(f5, args.readtype, args.minlen, args.maxlen, args.minq, args.maxq):
             filesused += f5.abspath + '\n'
             readtype = define_read_type(f5, args.readtype)
@@ -261,7 +187,7 @@ if __name__ == "__main__":
             update_qualpos(quals, qualpos, bin_width=args.bin_width, zscores=args.zscores, robust=args.robust_zscores)
 
     ##  Plot
-    qualposplot(qualpos, args.bin_width, zscores=args.zscores, robust=args.robust_zscores, filename=args.filename)
+    qualposplot(qualpos, args.bin_width, zscores=args.zscores, robust=args.robust_zscores, filename=outfile)
     if args.filename is not None:
         with open(filesused_h, 'w') as fofnout:
             fofnout.write(filesused)

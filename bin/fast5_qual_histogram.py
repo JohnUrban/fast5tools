@@ -172,7 +172,10 @@ if __name__ == "__main__":
     if args.filename is not None:
         filesused_h_ = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
         filesused_h = args.outdir + filesused_h_ if args.outdir.endswith('/') else args.outdir + '/' + filesused_h_
-        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename 
+        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename
+    else:
+        outfile = None
+        
     if args.bin_range is None:
         if args.mean_quality_scores:
             args.bin_range = '0,16,1'
