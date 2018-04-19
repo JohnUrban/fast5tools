@@ -830,7 +830,12 @@ class Fast5(object):
         else:
             comments = "\t" + comments
         return name, comments
-    
+
+    def get_seq(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            return self.seq[readtype]
+        
     def get_fastq(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
         # Thus all extra fastq fxns below can be replicated by providing the appropriate name here
