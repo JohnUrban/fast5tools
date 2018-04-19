@@ -4,7 +4,7 @@
 import h5py, os, sys
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
-from fast5tools.helperops import process_outdir
+from fast5tools.helperops import process_outdir, process_filesused
 from fast5tools.plotops import qualhist
 import argparse
 from glob import glob
@@ -169,20 +169,14 @@ args = parser.parse_args()
 if __name__ == "__main__":
     
     # Process Args
-    if args.filename is not None:
-        filesused_h_ = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
-        filesused_h = args.outdir + filesused_h_ if args.outdir.endswith('/') else args.outdir + '/' + filesused_h_
-        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename
-    else:
-        outfile = None
+    args.outdir = process_outdir(args.outdir)
+    outfile = args.outdir + args.filename if (args.filename is not None) else None
         
     if args.bin_range is None:
-        if args.mean_quality_scores:
-            args.bin_range = '0,16,1'
-        else:
-            args.bin_range = '0,32,1'
+        args.bin_range = '0,16,1' if args.mean_quality_scores else '0,32,1'
+        
     minrange, maxrange, step = (int(e) for e in args.bin_range.split(','))
-    process_outdir(args.outdir)
+    
     
     # Initialize
     quals = list()
@@ -201,11 +195,10 @@ if __name__ == "__main__":
  
     ##  Plot
     qualhist(quals, filename=outfile, minrange=minrange, maxrange=maxrange, step=step, density=args.density, cumulative=args.cumulative, text_only=args.no_plot)
-    if args.filename is not None:
-        with open(filesused_h, 'w') as fofnout:
-            fofnout.write(filesused)
-    else:
-        sys.stderr.write(filesused)
+
+    ## Files used
+    process_filesused(trigger=args.filename, filesused=filesused, outdir=args.outdir)
+
 
 
 

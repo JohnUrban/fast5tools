@@ -3,7 +3,7 @@
 import h5py, os, sys
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
-from fast5tools.helperops import process_outdir
+from fast5tools.helperops import process_outdir, process_filesused
 from fast5tools.plotops import update_qualpos, qualposplot
 import argparse
 from glob import glob
@@ -163,14 +163,8 @@ args = parser.parse_args()
 if __name__ == "__main__":
     
     # Process Args
-    process_outdir(args.outdir)
-    
-    if args.filename is not None:
-        filesused_h_ = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
-        filesused_h = args.outdir + filesused_h_ if args.outdir.endswith('/') else args.outdir + '/' + filesused_h_
-        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename
-    else:
-        outfile = None
+    args.outdir = process_outdir(args.outdir) ## adds / if needed
+    outfile = args.outdir + args.filename if (args.filename is not None) else None
         
     # Initialize
     qualpos = defaultdict(list)
@@ -188,11 +182,10 @@ if __name__ == "__main__":
 
     ##  Plot
     qualposplot(qualpos, args.bin_width, zscores=args.zscores, robust=args.robust_zscores, filename=outfile)
-    if args.filename is not None:
-        with open(filesused_h, 'w') as fofnout:
-            fofnout.write(filesused)
-    else:
-        sys.stderr.write(filesused)
+
+    ## Files used
+    process_filesused(trigger=args.filename, filesused=filesused, outdir=args.outdir)
+
 
 
 
