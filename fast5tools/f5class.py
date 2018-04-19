@@ -7,6 +7,7 @@ from Bio import SeqIO
 from glob import glob
 from random import randint, shuffle, seed
 import numpy as np
+from collections import defaultdict
 
 #logging
 import logging
@@ -1587,7 +1588,7 @@ class Fast5(object):
         ## it will record the same location as many times as there are stays at it
         ## by default position 0 is move 0 but is not a "stay", so start at 1
         ## name can be filepath, readstats, etc
-        events = self.get_events(readtpye)
+        events = self.get_events(readtype)
         length = len(events['mean'])
         index = 0
         stay_indexes = []
@@ -1596,6 +1597,25 @@ class Fast5(object):
                 stay_indexes.append( index )
             else:
                 index += int(events['move'][i])
+        return stay_indexes
+
+    def map_stay_event_coverage_in_read(self, readtype="template"):
+        ## assumes events are stranded/base-called
+        ## makes BED entries of locations of kmers that have move=0
+        ## it will record the same location as many times as there are stays at it
+        ## by default position 0 is move 0 but is not a "stay", so start at 1
+        ## name can be filepath, readstats, etc
+        events = self.get_events(readtype)
+        length = len(events['mean'])
+        seqlen = self.get_seq_len(readtype)
+        index = 0
+        d = defaultdict(int) ##{i:0 for i in range(seqlen)}
+        for i in range(1,length):
+            if events['move'][i] == 0:
+                d[index] += 1
+            else:
+                index += int(events['move'][i])
+        return d
                 
     def map_stay_events_to_reference(self, readtype="template"):
         ## 
