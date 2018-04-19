@@ -1,6 +1,8 @@
 ## JOHN URBAN (2015, 2016)
 
 import os
+from random import shuffle, seed
+from fast5tools.f5class import *
 
 ##
 #### fast5tofastx.py,
@@ -406,9 +408,43 @@ f5fxn[22] = lambda f5: f5.get_log_string()
 
 
 
+## F5 FILTERING/SELECTION OPERATIONS
+def define_read_type(f5, readtype):
+        if readtype in ('molecule'):
+            return f5.use_molecule()
+        else:
+            return readtype
+
+def meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
+    if f5.is_not_corrupt() and f5.is_nonempty():
+        readtype = define_read_type(f5, readtype)
+        if f5.has_read(readtype):
+            if f5.get_seq_len(readtype) >= minlen and f5.get_seq_len(readtype) <= maxlen:
+                if f5.get_mean_qscore(readtype) >= minq and f5.get_mean_qscore(readtype) <= maxq:
+                    return True
+    else:
+        return False
 
 
+## Fast5List OPs
+## The function below allows one to sample from the Fast5List
+## get_fast5_list(args.nfiles, args.fast5, args.random, args.randomseed, args.notarlite, filemode='r', sort=True)
+def get_fast5_list(nfiles, initial_list, random=False, randomseed=False, notarlite=False, filemode='r', sort=True):
+    if nfiles <= 0:
+        nfiles = len(initial_list)
+    if random:
+        if randomseed:
+            seed(randomseed) ## This seed will only make things reproducible given same exact conditions - seed not re-used later.
+        shuffle(initial_list) ## This only shuffles initial targets, not final files -- but can help simplify target expansion
 
+    # Downsample as necessary
+    initial_list_ds = initial_list[:nfiles] ## This only shrinks number of targets to simplify target expansion
+    
+    # Expand targets to get initial list
+    f5list = Fast5List(initial_list_ds, keep_tar_footprint_small=(not notarlite), filemode=filemode)
+
+    ## Take from expanded list: Shuffling and Downsampling actually happens here on indiv fast5s
+    return f5list.get_sample(n=nfiles, random=random, sort=sort)
 
 
 

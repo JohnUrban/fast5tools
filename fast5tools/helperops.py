@@ -1,3 +1,4 @@
+import os
 
 def gc(x):
     c=0
@@ -32,3 +33,13 @@ def rev_comp_seq_dict(seq_dict):
     for key,value in seq_dict.iteritems():
         out[key] = revcomp(value)
     return out
+
+
+
+
+
+def process_outdir(outdir):
+    if not outdir.endswith('/'):
+        outdir += '/'
+    if not os.path.exists(outdir):
+        os.system('mkdir ' + outdir)

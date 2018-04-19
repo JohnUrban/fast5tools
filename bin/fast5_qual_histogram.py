@@ -1,9 +1,11 @@
 #!/usr/bin/env python2.7
-# -*- coding: utf-8 -*-
+
 
 import h5py, os, sys
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
+from fast5tools.helperops import process_outdir
+from fast5tools.plotops import qualhist
 import argparse
 from glob import glob
 from collections import defaultdict
@@ -162,91 +164,29 @@ args = parser.parse_args()
 #################################################
 ##
 #################################################
-def define_read_type(f5, readtype):
-        if readtype in ('molecule'):
-            return f5.use_molecule()
-        else:
-            return readtype
-
-def meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
-    if f5.is_not_corrupt() and f5.is_nonempty():
-        readtype = define_read_type(f5, readtype)
-        if f5.has_read(readtype):
-            if f5.get_seq_len(readtype) >= minlen and f5.get_seq_len(readtype) <= maxlen:
-                if f5.get_mean_qscore(readtype) >= minq and f5.get_mean_qscore(readtype) <= maxq:
-                    return True
-    else:
-        return False
-
-
-
-
-def qualhist(qualpos, filename=None, minrange=0, maxrange=20, step=1, density=False, cumulative=False, text_only=True):
-    ## TODO: histtype : bar, barstacked, step, stepfilled;; orientation : horizontal, vertical;;
-    ## TODO: rwidth, color, 
-    if quals:
-        bins = range(minrange, maxrange, step)
-        ylab = 'Density' if density else 'Frequency'
-        ylab += ' (cumulative)' if cumulative else ''
-        n, outbins, patches = plt.hist(x=quals, bins=bins, density=density, cumulative=cumulative)
-        plt.xlabel("Base Quality")
-        plt.ylabel(ylab)
-        plt.xticks(rotation=65, fontsize=8)
-    else:
-        sys.stderr.write("No reads that meet criteria...\n")
-    if text_only:
-        hist_as_txt = '\n'.join([str(k)+'\t'+str(v) for k,v in zip(bins, n)]).strip()
-        if filename is not None:
-            with open(filename, 'w') as txtout:
-                txtout.write(hist_as_txt)
-        else:
-            sys.stdout.write(hist_as_txt)
-        
-    else:
-        if filename is not None:
-            try:
-                plt.savefig(filename)
-                plt.close()
-            except:
-                sys.stderr.write("Unrecognized extension for %s!\nTry .pdf or .jpg or .png \n" % (plot_file))
-        else:
-                plt.show()
 
 
 if __name__ == "__main__":
     
     # Process Args
+    if args.filename is not None:
+        filesused_h_ = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
+        filesused_h = args.outdir + filesused_h_ if args.outdir.endswith('/') else args.outdir + '/' + filesused_h_
+        outfile = args.outdir + args.filename if args.outdir.endswith('/') else args.outdir + '/' + args.filename 
     if args.bin_range is None:
         if args.mean_quality_scores:
             args.bin_range = '0,16,1'
         else:
             args.bin_range = '0,32,1'
     minrange, maxrange, step = (int(e) for e in args.bin_range.split(','))
-    if not args.outdir.endswith('/'):
-        args.outdir += '/'
-    if not os.path.exists(args.outdir):
-        os.system('mkdir ' + args.outdir)
-    if args.filename is not None:
-        filesused_h = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
-    if args.nfiles <= 0:
-        args.nfiles = len(args.fast5)
-    if args.random:
-        if args.randomseed:
-            seed(args.randomseed) ## This seed will only make things reproducible given same exact conditions - seed not re-used later.
-        shuffle(args.fast5) ## This only shuffles initial targets, not final files -- but can help simplify target expansion
-
-    # Downsample as necessary
-    args.fast5 = args.fast5[:args.nfiles] ## This only shrinks number of targets to simplify target expansion
+    process_outdir(args.outdir)
     
-    # Expand targets to get initial list
-    f5list = Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite), filemode='r')
-
     # Initialize
     quals = list()
     filesused = ''
 
     ## Iterate over fast5s
-    for f5 in f5list.get_sample(n=args.nfiles, random=args.random, sort=True): ## shuffling and downsampling actually happen here on indiv fast5s
+    for f5 in get_fast5_list(args.nfiles, args.fast5, args.random, args.randomseed, args.notarlite, filemode='r', sort=True):
         if meets_all_criteria(f5, args.readtype, args.minlen, args.maxlen, args.minq, args.maxq):
             filesused += f5.abspath + '\n'
             readtype = define_read_type(f5, args.readtype)
@@ -257,7 +197,7 @@ if __name__ == "__main__":
                 quals += [int(e) for e in (' '.join(f5.get_quals_as_int(readtype).split('\n')[1:])).split()]
  
     ##  Plot
-    qualhist(quals, filename=args.filename, minrange=minrange, maxrange=maxrange, step=step, density=args.density, cumulative=args.cumulative, text_only=args.no_plot)
+    qualhist(quals, filename=outfile, minrange=minrange, maxrange=maxrange, step=step, density=args.density, cumulative=args.cumulative, text_only=args.no_plot)
     if args.filename is not None:
         with open(filesused_h, 'w') as fofnout:
             fofnout.write(filesused)
