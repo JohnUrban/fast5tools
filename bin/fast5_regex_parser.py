@@ -280,8 +280,9 @@ if __name__ == "__main__":
                 filesused += f5.abspath + '\n'
                 readtype = define_read_type(f5, args.readtype)
                 seq = f5.get_seq(readtype)
-                seq_name = f5.abspath
-                regex_function(seq, seq_name, fwd_re, rev_re, args.outformat, count_gtract=True, noreverse=False)
+                #seq_name = f5.abspath
+                seq_name = f5.get_pore_info_name(readtype)
+                regex_function(seq, seq_name, fwd_re, rev_re, args.outformat, count_gtract=args.numtracts, noreverse=args.noreverse)
 
     ## Files used
     process_filesused(trigger=args.filename, filesused=filesused, outdir=args.outdir)
