@@ -3,6 +3,7 @@
 import h5py, os, sys
 from fast5tools.f5class import *
 from fast5tools.f5ops import *
+from fast5tools.helperops import process_outdir
 import argparse
 from glob import glob
 from random import shuffle
@@ -38,8 +39,11 @@ Adjust this number to get info from the first N files.
 Use --random to select N at random from the list.
 Set this to <= 0 to get info for all fast5 files -- not typically needed/done.''')
 
-parser.add_argument('-r', '--random', action='store_true', default=False,
+parser.add_argument('-R', '--random', action='store_true', default=False,
                     help = '''Randomize what files are looked at.''')
+
+parser.add_argument('-S', '--randomseed', type=int, default=False,
+                    help = '''Randomize what files are looked at, but use given seed for reproducibility.''')
 
 parser.add_argument('-o', '--outdir', type=str, default="./",
                     help = '''....''')
@@ -63,36 +67,23 @@ Use --notarlite to turn it off.''')
 args = parser.parse_args()
 
 
-def run_get_attributes(f5, args):
-    getattrscript = '/'.join(sys.argv[0].split('/')[:-1]) + '/../fast5tools/scripts/getAttributes.sh'
-    outfile = args.outdir + f5.filebasename + '.fast5info.txt'
-    f5file = f5.abspath
-    f5.close()
-    cmd = getattrscript + " " + f5file + " > " + outfile + ' 2>/dev/null'
-    #sys.stderr.write(cmd + '\n')
-    os.system(cmd)
+##def run_get_attributes(f5, args):
+##    getattrscript = '/'.join(sys.argv[0].split('/')[:-1]) + '/../fast5tools/scripts/getAttributes.sh'
+##    outfile = args.outdir + f5.filebasename + '.fast5info.txt'
+##    f5file = f5.abspath
+##    f5.close()
+##    cmd = getattrscript + " " + f5file + " > " + outfile + ' 2>/dev/null'
+##    #sys.stderr.write(cmd + '\n')
+##    os.system(cmd)
     
 if __name__ == "__main__":
     # Process Args
-    if not args.outdir.endswith('/'):
-        args.outdir += '/'
-    if not os.path.exists(args.outdir):
-        os.system('mkdir ' + args.outdir)
-    if args.nfiles <= 0:
-        args.nfiles = len(args.fast5)
-    if args.random:
-        shuffle(args.fast5) ## This only shuffles initial targets, not final files -- but can help simplify target expansion
-
-    # Downsample as necessary
-    args.fast5 = args.fast5[:args.nfiles] ## This only shrinks number of targets to simplify target expansion
-
-    # Expand targets to get initial list
-    f5list = Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite), filemode='r')
-
+    args.outdir = process_outdir(args.outdir)
+    
     ## Iterate over fast5s
-    for f5 in f5list.get_sample(n=args.nfiles, random=args.random, sort=True): ## shuffling and downsampling actually happen here on indiv fast5s
+    for f5 in Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite), filemode='r', downsample=args.nfiles, random=args.random, randomseed=args.randomseed):
         #run_get_attributes(f5, args)
-        outfile = args.outdir + f5.filebasename + '.fast5info.txt'
+        outfile = args.outdir + f5.filebasename + '.fast5info.txt' 
         with open(outfile, 'w') as f:
             f.write(f5.get_all_attributes())
 

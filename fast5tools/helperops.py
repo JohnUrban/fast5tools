@@ -43,3 +43,4 @@ def process_outdir(outdir):
         outdir += '/'
     if not os.path.exists(outdir):
         os.system('mkdir ' + outdir)
+    return outdir
