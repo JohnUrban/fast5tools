@@ -1,7 +1,20 @@
+import sys
+from collections import defaultdict
+
+# Plotting
 import matplotlib
 ## may need following line for remote jobs (e.g. submitting batch scripts)
 ## matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
+
+
+## Fast5Tools
+from fast5tools.helperops import *
+
+
+## 2018-04-20
+## Some of the contents derive from old code imported from my poreminion tools
+## Needs to be tested, cleaned up, re-done
 
 def qualhist(quals, filename=None, minrange=0, maxrange=20, step=1, density=False, cumulative=False, text_only=True):
     ## TODO: histtype : bar, barstacked, step, stepfilled;; orientation : horizontal, vertical;;
@@ -86,3 +99,126 @@ def qualposplot(qualpos, bin_width, zscores=False, robust=False, filename=None):
 
     else:
             plt.show()
+
+
+
+
+
+################################################################
+##### Non-EdgeR Kmer Plots
+################################################################
+## Need to test all of these.
+def choose_kmer_plot(kmerdict=False, refdict=False, gg=False):
+    if kmerdict and not refdict:
+        if not gg:
+            singleTableKmerPlot(kmerdict)
+        else:
+            singleTablePlot_gg(parser, args)
+    elif kmerdict and refdict:
+        twoTableKmerScatterPlot(kmerdict, refdict)
+
+
+
+def singleTableKmerHist(kmercounts, density=False, cumulative=False):
+    ''' kmerdict is a defaultdict(int)
+        It can take both empty and non-empty kmerdicts
+        returns update of the input kmerdict given the input string and k'''
+    kmerdict = kmercounts if isinstance(kmercounts, dict) else kmercount_in_table(kmercounts)
+    numKmers = len(kmerdict)
+    data = kmerDictToPlotData(kmerdict)
+    n, outbins, patches = plt.hist(x=data['counts'], density=density, cumulative=cumulative)
+    plt.show()
+    
+def singleTableKmerPlot(kmercounts):
+    ''' kmerdict is a defaultdict(int)
+        It can take both empty and non-empty kmerdicts
+        returns update of the input kmerdict given the input string and k'''
+    kmerdict = kmercounts if isinstance(kmercounts, dict) else kmercount_in_table(kmercounts)
+    numKmers = len(kmerdict)
+    data = kmerDictToPlotData(kmerdict)
+    plt.bar(x=range(1,numKmers+1), height=data['counts'], width=1.0)
+    plt.show()
+    
+
+
+def twoTableKmerScatterPlot(kmercounts, refcounts, saveas=None):
+    ''' kmerdict is a defaultdict(int)
+        It can take both empty and non-empty kmerdicts
+        returns update of the input kmerdict given the input string and k'''
+    ## read in and equilibrate the 2 kmer count tables
+    kmerdict, refdict = readInTwoKmerTables(kmercounts, refcounts)
+    
+    ## make approp data structures
+    test = kmerDictToPlotData(kmerdict)
+    reference = kmerDictToPlotData(refdict)
+
+    plt.scatter(x=reference['counts'], y=test['counts'], s=10, marker='.')
+    for i in range(len(test['kmers'])):
+        plt.annotate(test['kmers'][i], (reference['counts'][i],test['counts'][i]), size='xx-small')
+
+    plt.xlabel('Reference')
+    plt.ylabel('Test')
+
+    if saveas is not None and (saveas.endswith(".pdf") or saveas.endswith(".jpg")):
+            plt.savefig(saveas)
+    else:
+        plt.show()
+
+def twoTableKmer_MA_Plot(kmercounts, refcounts, saveas=None, scale_to_ref=False, logplot=False, base=2):
+    ''' kmerdict is a defaultdict(int)
+        It can take both empty and non-empty kmerdicts
+        returns update of the input kmerdict given the input string and k'''
+    ## read in and equilibrate the 2 kmer count tables
+    kmerdict, refdict = readInTwoKmerTables(kmercounts, refcounts)
+    
+    ## make approp data structures
+    test = kmerDictToPlotData(kmerdict)
+    reference = kmerDictToPlotData(refdict)
+
+    ## Scale Test to Reference
+    test_z, test_med, test_mad = median_normalize(test['counts'])
+    ref_z, ref_med, ref_mad = median_normalize(reference['counts'])
+
+    ## Optional: Scale Test to Reference
+    if scale_to_ref:
+        ## Normalize to both ref_spread and ref_median -- this is analogous to comparing z-scores, so makes more sense to me
+        test_z = (test_z*ref_mad) + ref_med
+        ref_z = (ref_z*ref_mad) + ref_med
+        ## Normalize to just ref_median, retaining test_spread
+        ## test_z = (test_z*test_mad) + ref_med
+
+    ## Optional: Log
+    if logplot:
+        test_z = logbase(test_z, base)
+        ref_z = logbase(ref_z, base)
+
+    ## Get avg counts (x-axis)
+    avg_z = (test_z + ref_z) / 2.0
+
+    ## Get difference (y-axis)
+    diffs = test_z - ref_z
+
+    ## Scatter
+    plt.scatter(x=avg_z, y=diffs, s=10, marker='.')
+    for i in range(len(test['kmers'])):
+        plt.annotate(test['kmers'][i], (avg_z[i],diffs[i]), size='xx-small')
+
+    ## Handle axis labels
+    ylab = 'Difference: Test - Reference'
+    xlab = 'Average Counts'
+    if logplot:
+        ylab = 'Log'+str(base) + ' ' + ylab
+        xlab = 'Average Log' +str(base) + ' Counts'
+    if scale_to_ref:
+        ylab += '\n(scaled to reference)'
+
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+
+    ## Saving/Showing
+    if saveas is not None and (saveas.endswith(".pdf") or saveas.endswith(".jpg")):
+            plt.savefig(saveas)
+    else:
+        plt.show()
+
+
