@@ -2,6 +2,18 @@ import os, sys, re
 import string
 from cStringIO import StringIO
 from Bio import SeqIO
+from collections import Counter, defaultdict
+from math import log10, log
+
+## Fast5Tools
+from fast5tools.f5class import *
+from fast5tools.f5ops import *
+from fast5tools.fileListClass import *
+
+
+## 2018-04-20
+## Some of the contents derive from old code imported from my poreminion tools
+## Needs to be tested, cleaned up, re-done
 
 def gc(x):
     c=0
@@ -197,6 +209,20 @@ def get_regex_counts_in_fast5(fast5, regex, regex2=None):
 ##########################################################################
 ## KMER
 ##########################################################################
+def log2(x):
+    return log(x)/float(log(2))
+
+def logbase(x, base):
+    return np.log(x)/float(np.log(base))
+
+def basecounter(kmer, basedict):
+    '''basedict is a defaultdict(int) -- provide empty or non-empty one for update'''
+    for b in kmer.upper():
+        basedict[b] += 1
+    return basedict
+
+def countbases(seq, uppper=True):
+    return Counter(seq.upper()) if upper else Counter(seq)
 
 def kmercount_in_string(string, kmerdict, k):
     ''' kmerdict is a defaultdict(int)
@@ -240,9 +266,97 @@ def kmercount_in_fastx(fh, fastx='fasta', k=6, kmerdict=None, rev_comp=False):
 def kmercount_in_table(kmerCountFile):
     ''' Input is a kmer count table.'''
     kmerdict = defaultdict(int)
-    fh = kmerCountFile
+    if not isinstance(kmerCountFile, file):
+        if isinstance(kmerCountFile, dict):
+            return kmerCountFile
+        elif isinstance(kmerdict, str):
+            kmerCountFile = open(kmerCountFile)        
+    # Get kmer info
     for line in open(fh, 'r'):
         kmer, count, prop = line.rstrip().split('\t')
         kmerdict[kmer] = int(count)
+    # Close file
+    kmerCountFile.close()
+    # Return counts
     return kmerdict
 
+def ensureEqualKmerSets(kmerdict1, kmerdict2):
+    ''' dicts are defaultdict(int)'''
+    ## make sure they have same set of kmers, for any missing elements in set A or B, add it with count of 0
+    for key in kmerdict1:
+        kmerdict2[key]
+    for key in kmerdict2:
+        kmerdict1[key]
+    return kmerdict1, kmerdict2
+
+
+def kmerDictToPlotData(kmerdict):
+    data = defaultdict(list)
+    for k in sorted(kmerdict.keys()):
+        data['kmers'].append(k)
+        data['counts'].append(kmerdict[k])
+    return data
+
+def totalKmerCount(kmerdict):
+    return sum(kmerdict.values())
+
+def readInTwoKmerTables(kmercounts, refcounts):
+    kmerdict = kmercounts if isinstance(kmercounts, dict) else kmercount_in_table(kmercounts)
+    refdict = refcounts if isinstance(refcounts, dict) else kmercount_in_table(kmercounts)
+    ## ensure equal kmer sets
+    kmerdict, refdict = ensureEqualKmerSets(kmerdict, refdict)
+    return kmerdict, refdict
+
+
+def make_count_dict(parser, args):
+    ## read in and equilibrate the 2 kmer count tables
+    kmerdict1, kmerdict2 = readInTwoKmerTables(parser, args)
+    ## get total counts
+    total1 = totalKmerCount(kmerdict1)
+    total2 = totalKmerCount(kmerdict2)
+    ## add totals to respective kmerdicts
+    kmerdict1["Total"] = total1
+    kmerdict2["Total"] = total2
+    ## add kmdericts to defaultdict(dict) that has keys condition1 and condition2
+    counts = defaultdict(dict)
+    counts['condition1'] = dict(kmerdict1)
+    counts['condition2'] = dict(kmerdict2)
+    return dict(counts)
+
+
+
+def run_kmer_counting(initial_list, k, readtype, revcomp, nfiles, random, randomseed, notarlite, fasta, fastq, minlen, maxlen, minq, maxq):
+    ## Tracking files used 
+    filesused = ''
+    
+    #Initialize -- should this be initialized with all possible kmers (all the 0-counts could ruin diff representation analysis though)
+    kmerdict = defaultdict(int)
+    
+    ## Execute:
+    if fasta:
+        for fa in FileList(initial_list, extension=('.fa','.fasta', '.fna'), keep_tar_footprint_small=(not notarlite), downsample=nfiles, random=random, randomseed=randomseed):
+            filesused += os.path.abspath(fa) + '\n'
+            with open(fa) as fh:
+                kmerdict = kmercount_in_fastx(fh, fastx='fasta', k=k, kmerdict=kmerdict, rev_comp=revcomp)
+    elif fastq:
+        for fq in FileList(initial_list, extension=('.fq','.fastq'), keep_tar_footprint_small=(not notarlite), downsample=nfiles, random=random, randomseed=randomseed):
+            filesused += os.path.abspath(fq) + '\n'
+            with open(fq) as fh:
+                kmerdict = kmercount_in_fastx(fh, fastx='fastq', k=k, kmerdict=kmerdict, rev_comp=revcomp)
+    else:
+        ## Iterate over fast5s
+        for f5 in Fast5List(initial_list, keep_tar_footprint_small=(not notarlite), filemode='r', downsample=nfiles, random=random, randomseed=randomseed):
+            if meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
+                filesused += f5.abspath + '\n'
+                readtype = define_read_type(f5, readtype)
+                kmerdict = kmercount_in_fast5(f5, readtype, k=k, kmerdict=kmerdict, rev_comp=revcomp)
+    return kmerdict, filesused
+
+
+def median_normalize(counts):
+    counts = np.array(counts)
+    med = np.median( counts )
+    diffs = counts - med
+    mad = np.median( np.absolute( diffs ) )
+    z = diffs / mad
+    return z, med, mad
