@@ -103,8 +103,10 @@ class FileList(object):
         return files
 
     def _expand_dir(self, d):
-        pattern = d + '/' + '*'+self.extension
-        files = glob(pattern)
+        files = []
+        for ext in self.extension: ## should be a tuple even if 1
+            pattern = d + '/' + '*'+ ext
+            files += glob(pattern)
         return files
 
     def _expand_tar(self, tarball):
