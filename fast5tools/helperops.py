@@ -1,6 +1,7 @@
 import os, sys, re
 import string
 from cStringIO import StringIO
+from Bio import SeqIO
 
 def gc(x):
     c=0
@@ -35,6 +36,12 @@ def rev_comp_seq_dict(seq_dict):
     for key,value in seq_dict.iteritems():
         out[key] = revcomp(value)
     return out
+
+def rc(seq):
+    intab='ACGTacgtUuNn'
+    outtab='TGCAtgcaAaNn'
+    trantab = maketrans(intab, outtab)
+    return seq.translate(trantab)[-1::-1]
 
 ##########################################################################
 ## PROCESS XYZ
@@ -186,4 +193,56 @@ def get_regex_counts_in_fast5(fast5, regex, regex2=None):
         counts.append(get_regex_count_in_fast5_fasta(complement, regex2))
     return counts
         
+
+##########################################################################
+## KMER
+##########################################################################
+
+def kmercount_in_string(string, kmerdict, k):
+    ''' kmerdict is a defaultdict(int)
+        It can take both empty and non-empty kmerdicts
+        returns update of the input kmerdict given the input string and k'''
+    string = string.upper()
+    for i in range(len(string)-k+1):
+        kmerdict[string[i:i+k]] += 1
+    return kmerdict
+
+def writekmer(kmerdict, outfile):
+    ''' kmerdict is a dict/default dict object'''
+    fhout = open(outfile, 'w') if outfile is not None else sys.stdout
+    total = float(sum(kmerdict.values()))
+    for kmer in sorted(kmerdict.keys()): ## this could be a big memory suck
+        fhout.write(kmer + '\t' + str(kmerdict[kmer]) + '\t' + str(kmerdict[kmer]/total) + '\n')
+    if outfile is not None:
+        fhout.close()
+
+
+def kmercount_in_fast5(f5, readtype, k=6, kmerdict=None, rev_comp=False):
+    if kmerdict is None:
+        kmerdict = defaultdict(int)
+    kmerdict = kmercount_in_string(f5.get_seq(readtype), kmerdict, k)
+    if rev_comp:
+        kmerdict = kmercount_in_string(f5.get_rev_comp_seq(readtype), kmerdict, k)
+    return kmerdict
+
+
+def kmercount_in_fastx(fh, fastx='fasta', k=6, kmerdict=None, rev_comp=False):
+    if kmerdict is None:
+        kmerdict = defaultdict(int)
+    for fa in SeqIO.parse(fh, fastx):
+        if fa is not None:
+            kmerdict = kmercount_in_string(str(fa.seq), kmerdict, k)
+            if rev_comp:
+                kmerdict = kmercount_in_string(str(fa.reverse_complement().seq), kmerdict, k)
+    return kmerdict
+
+
+def kmercount_in_table(kmerCountFile):
+    ''' Input is a kmer count table.'''
+    kmerdict = defaultdict(int)
+    fh = kmerCountFile
+    for line in open(fh, 'r'):
+        kmer, count, prop = line.rstrip().split('\t')
+        kmerdict[kmer] = int(count)
+    return kmerdict
 
