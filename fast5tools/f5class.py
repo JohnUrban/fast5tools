@@ -8,6 +8,7 @@ from glob import glob
 from random import randint, shuffle, seed
 import numpy as np
 from collections import defaultdict
+from string import maketrans
 
 #logging
 import logging
@@ -836,6 +837,14 @@ class Fast5(object):
         if self.has_read(readtype):
             self._parse_fastq_info(readtype)
             return self.seq[readtype]
+
+    def get_rev_comp_seq(self, readtype):
+        if self.has_read(readtype):
+            self._parse_fastq_info(readtype)
+            intab='ACGTacgtUuNn'
+            outtab='TGCAtgcaAaNn'
+            trantab = maketrans(intab, outtab)
+            return self.seq[readtype].translate(trantab)[-1::-1]
         
     def get_fastq(self, readtype, name=False, comments=False):
         #Nov 17 - transitioning to having this use any name given, pore_info by deault
