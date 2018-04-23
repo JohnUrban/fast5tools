@@ -4,6 +4,7 @@ from cStringIO import StringIO
 from Bio import SeqIO
 from collections import Counter, defaultdict
 from math import log10, log
+from itertools import product
 
 ## Fast5Tools
 from fast5tools.f5class import *
@@ -54,6 +55,16 @@ def rc(seq):
     outtab='TGCAtgcaAaNn'
     trantab = maketrans(intab, outtab)
     return seq.translate(trantab)[-1::-1]
+
+
+
+def make_name(pfx,root,sfx):
+    return pfx + root + sfx
+
+def make_name_function(pfx, sfx):
+    def f(root):
+        return pfx + root + sfx
+    return f
 
 ##########################################################################
 ## PROCESS XYZ
@@ -221,8 +232,12 @@ def basecounter(kmer, basedict):
         basedict[b] += 1
     return basedict
 
-def countbases(seq, uppper=True):
+def countbases(seq, upper=True):
     return Counter(seq.upper()) if upper else Counter(seq)
+
+def gcbases(seq, upper=True):
+    bases = countbases(seq, upper)
+    return 100.0*float(bases['G']+bases['C'])/sum(bases.values())
 
 def kmercount_in_string(string, kmerdict, k):
     ''' kmerdict is a defaultdict(int)
@@ -308,22 +323,6 @@ def readInTwoKmerTables(kmercounts, refcounts):
     return kmerdict, refdict
 
 
-def make_count_dict(parser, args):
-    ## read in and equilibrate the 2 kmer count tables
-    kmerdict1, kmerdict2 = readInTwoKmerTables(parser, args)
-    ## get total counts
-    total1 = totalKmerCount(kmerdict1)
-    total2 = totalKmerCount(kmerdict2)
-    ## add totals to respective kmerdicts
-    kmerdict1["Total"] = total1
-    kmerdict2["Total"] = total2
-    ## add kmdericts to defaultdict(dict) that has keys condition1 and condition2
-    counts = defaultdict(dict)
-    counts['condition1'] = dict(kmerdict1)
-    counts['condition2'] = dict(kmerdict2)
-    return dict(counts)
-
-
 
 def run_kmer_counting(initial_list, k, readtype, revcomp, nfiles, random, randomseed, notarlite, fasta, fastq, minlen, maxlen, minq, maxq):
     ## Tracking files used 
@@ -357,6 +356,161 @@ def median_normalize(counts):
     counts = np.array(counts)
     med = np.median( counts )
     diffs = counts - med
-    mad = np.median( np.absolute( diffs ) )
+    absdiffs = np.absolute( diffs )
+    mad = np.median( absdiffs )
+    if mad == 0:
+        mad = np.mean( absdiffs )
     z = diffs / mad
     return z, med, mad
+
+
+
+def get_kmers(k=6):
+    return [''.join(e) for e in [e for e in product('ACGT', repeat=k)]]
+
+def compress_string(seq, seqlen=None):
+    '''Compresses homopolymers to 1 base'''
+    if seqlen is None:
+        seqlen = len(seq)
+    cs = seq[0]
+    for i in range(1,seqlen):
+        if seq[i] != cs[-1]:
+            cs += seq[i]
+    return cs
+
+def compress_len(seq, seqlen=None):
+    return len(compress_string(seq, seqlen))
+
+def kmer_compression(k=6):
+    kmers = get_kmers(k)
+    return {kmer:compress_len(kmer,k) for kmer in kmers}
+    
+    
+
+
+    
+
+
+### CLASSES
+class MedNormAnalysis(object):
+    def __init__(self, testdict=False, refdict=False, sd=0.2):
+        ''' testdict = condition2, refdict=condition1'''
+        assert testdict is not False ## If give only 1, needs to be testdict
+        assert refdict is not False ## providing only testdict not implemented yet
+        self.sd = sd
+        self.conditions = ['condition1', 'condition2']
+        self.counts = {'condition1':refdict, 'condition2':testdict}
+        self.all_genes = sorted(list(set(testdict.keys() + refdict.keys())))
+        self._define_data()
+        self._ensureEqualKmerSets()
+        self.medianNorm = None
+        self.results = None
+        self._median_normalize()
+
+    def _median_normalize(self):
+        self.medNorm = {}
+        ref_z, ref_med, ref_mad = median_normalize([self.counts['condition1'][gene] for gene in self.final_genes])
+        test_z, test_med, test_mad = median_normalize([self.counts['condition2'][gene]  for gene in self.final_genes])
+        self.medNorm[self.conditions[0]] = {}
+        self.medNorm[self.conditions[0]]['size'] = sum(self.counts[self.conditions[0]].values())
+        self.medNorm[self.conditions[0]]['zscores'] = ref_z
+        self.medNorm[self.conditions[0]]['median'] = ref_med
+        self.medNorm[self.conditions[0]]['mad'] = ref_mad
+        self.medNorm[self.conditions[0]]['norm_counts'] = (ref_z*ref_mad) + float(ref_med)
+        self.medNorm[self.conditions[0]]['norm_size'] = np.sum(self.medNorm[self.conditions[0]]['norm_counts'])
+        #self.medNorm[self.conditions[0]]['cpm'] 
+        self.medNorm[self.conditions[1]] = {}
+        self.medNorm[self.conditions[1]]['size'] = sum(self.counts['condition2'].values())
+        self.medNorm[self.conditions[1]]['zscores'] = test_z
+        self.medNorm[self.conditions[1]]['median'] = test_med
+        self.medNorm[self.conditions[1]]['mad'] = test_mad
+        self.medNorm[self.conditions[1]]['norm_counts'] = (test_z*ref_mad) + float(ref_med)
+        self.medNorm[self.conditions[1]]['norm_size'] = np.sum(self.medNorm[self.conditions[1]]['norm_counts'])
+        
+        self.results = {}
+        # might need to do np.clip(a,a_min,a_max) here to avoid <= 0 numbers.
+        self.results['diff'] = self.medNorm[self.conditions[1]]['norm_counts'] - self.medNorm[self.conditions[0]]['norm_counts']
+        self.results['fc'] = self.medNorm[self.conditions[1]]['norm_counts'] / self.medNorm[self.conditions[0]]['norm_counts']
+        self.results['logfc'] = logbase(self.results['fc'], base=2)
+        self.results['avg'] = 0.5 *  (self.medNorm[self.conditions[1]]['norm_counts'] + self.medNorm[self.conditions[0]]['norm_counts'])
+        self.results['logavg'] = logbase(self.results['avg'], base=2)
+
+    def _define_data(self):
+        self.data = []
+        self.final_genes = []
+        for gene in self.all_genes:
+            curr_row =  [int(self.counts[condition][gene]) for condition in self.conditions]
+            if sum(curr_row) > 0:
+                self.data.append(curr_row)
+                self.final_genes.append(gene)
+        self.data = np.array(self.data)
+        self.n_genes = len(self.final_genes)
+        #self.final_genes = np.array(self.final_genes)
+        #self.final_genes = np.array([[e] for e in self.final_genes])
+
+    def _ensureEqualKmerSets(self):
+        for key in self.final_genes:
+        #for i in range(len(self.final_genes)):
+            #key = self.final_genes[i][0]
+            self.counts['condition1'][key]
+            self.counts['condition2'][key]
+
+
+    def get_zscores(self, condition=0):
+        return self.medNorm[self.conditions[condition]]['zscores']
+
+    def get_ref_zscores(self):
+        return self.get_zscores(0)
+
+    def get_test_zscores(self):
+        return self.get_zscores(1)
+
+    def get_norm_counts(self, condition=0):
+        return self.medNorm[self.conditions[condition]]['norm_counts']
+
+    def get_norm_ref_counts(self):
+        return self.get_norm_counts(0)
+    
+    def get_norm_test_counts(self):
+        return self.get_norm_counts(1)
+
+
+    def get_log_counts(self, base=2, condition=0):
+        ## Can only take log of positive numbers.
+        ## For now this assumes that scaling to the reference returns only positive numbers
+        ## But this needs to be revisited as that assumption can be easily violated
+        return logbase(self.medNorm[self.conditions[condition]]['norm_counts'], base)
+
+    def get_log_ref_counts(self, base=2):
+        return get_log_counts(base, 0)
+    
+    def get_log_test_counts(self, base=2):
+        return get_log_counts(base, 1)
+
+
+
+    def get_logavg(self, base=2):
+        if base == 2:
+            return self.results['logavg']
+        else:
+            return logbase(self.results['avg'], base=base)
+
+    def get_fc(self):
+        return self.results['fc']
+
+    def get_logfc(self, base=2):
+        if base == 2:
+            return self.results['logfc']
+        else:
+            return logbase(self.results['fc'], base=base)
+
+    def get_norm_count_avg(self):
+        return self.results['avg']
+
+    def get_norm_count_diff(self):
+        return self.results['diff']
+
+    def get_genes(self):
+        return self.final_genes
+
+
