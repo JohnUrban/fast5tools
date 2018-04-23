@@ -105,9 +105,9 @@ def qualposplot(qualpos, bin_width, zscores=False, robust=False, filename=None):
 
 
 ################################################################
-##### Non-EdgeR Kmer Plots
+##### 
 ################################################################
-## Need to test all of these.
+
 def choose_kmer_plot(kmerdict=False, refdict=False, gg=False):
     if kmerdict and not refdict:
         if not gg:
@@ -118,7 +118,17 @@ def choose_kmer_plot(kmerdict=False, refdict=False, gg=False):
         twoTableKmerScatterPlot(kmerdict, refdict)
 
 
+def general_barplot(x, height, width=1.0, edgecolor='k', align='center', saveas=False):
+    # For some, use: align='edge'
+    plt.bar(x=x, height=height, width=width, edgecolor=edgecolor)
+    if saveas:
+        plt.savefig(saveas)
+    else:
+        plt.show()
+    plt.close()
 
+
+    
 def singleTableKmerHist(kmercounts, density=False, cumulative=False, saveas=False):
     ''' kmerdict is a defaultdict(int)
         It can take both empty and non-empty kmerdicts
@@ -140,12 +150,8 @@ def singleTableKmerPlot(kmercounts, saveas=False):
     kmerdict = kmercounts if isinstance(kmercounts, dict) else kmercount_in_table(kmercounts)
     numKmers = len(kmerdict)
     data = kmerDictToPlotData(kmerdict)
-    plt.bar(x=range(1,numKmers+1), height=data['counts'], width=1.0)
-    if saveas:
-        plt.savefig(saveas)
-    else:
-        plt.show()
-    plt.close()
+    general_barplot(x=range(1,numKmers+1), height=data['counts'], width=1.0, saveas=saveas)
+
     
 
 
