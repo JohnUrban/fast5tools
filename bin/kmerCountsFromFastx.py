@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 import h5py, os, sys, csv
 import argparse
+# General
 from glob import glob
 import string
 from cStringIO import StringIO
@@ -8,14 +9,6 @@ from collections import defaultdict
 from Bio import SeqIO
 from math import log10, log
 import numpy as np
-
-## R stuff
-try:
-    import rpy2.robjects as robjects
-    import rpy2.robjects.numpy2ri
-    rpy2.robjects.numpy2ri.activate()
-except:
-    sys.stderr.write('Differential representation')
 
 # Plotting
 import matplotlib.pyplot as plt
@@ -26,6 +19,8 @@ from fast5tools.f5ops import *
 from fast5tools.helperops import *
 from fast5tools.fileListClass import *
 from fast5tools.plotops import *
+from fast5tools.edgeRops import *
+
 
 #################################################
 ## Argument Parser
@@ -107,6 +102,10 @@ Molecule returns single fasta for each fast5 by following rules:
     Instead of choosing the longer one, it chooses the one with a higher quality mean quality score.''')
 
 
+parser.add_argument('-bcv', '--square-root-dispersion', dest='bcv', type=float, default=0.2,
+                    help='''When there are no replicates in edgeR, dispersion must be determined by the user.
+                            The default is 0.2. Other values to try could be 0.01-0.4 (or any).
+                            p-values will be sensitive to choice of bcv. Fold change will not.''')
 
 
 parser.add_argument('--minlen', type=int, default=0, help='''Only report reads >= minlen. Default: 0 bp.''')
@@ -140,10 +139,19 @@ parser.add_argument('--filesused', type=str, default='qual_v_pos', help='''
 parser.add_argument('-o', '--outdir', type=str, default="./",
                     help = '''....''')
 
-parser.add_argument('--filename', type=str, default=None, help='''
-For output. Default None (stdout).
-If a filename is given, filesused will be reported in a similarly named file ending with .filesused.fofn''')
+parser.add_argument('--filename', type=str, default='kmer_counts.txt', help='''
+For output. Default: kmer_counts.txt. (Formerly defaulted to None).
+If a filename is given, filesused will be reported in a similarly named file ending with .filesused.fofn
+When --reference used, files will have similar name with reference_ prepended.''')
 
+parser.add_argument('--plotfilesuffix', type=str, default=None, help='''
+Suffix and extension for output plots. Default None (PDFs output in outdir using hard-coded prefixes).
+Plots will be in specified outdir.
+The minimum information to give is the extension (no dot needed) -- e.g. png, jpg, pdf.
+Example1: myexperiment.png ((plots will be named plotprefix_myexperiment.png))
+Example2: .jpg ((plots will be named plotprefix_.jpg))
+Example3: jpg ((plots will be named plotprefix.jpg))
+Example4: when None (default), plots will be named plotprefix.pdf''')
 
 
 
@@ -204,7 +212,9 @@ if __name__ == "__main__":
 
     
     ## Reference?
+    do_comparison = False
     if args.reference is not None:
+        do_comparison = True        
         ## Out
         refoutfile = args.outdir + 'reference_' + args.filename if (args.filename is not None) else None
         ## Convert into list:
@@ -227,19 +237,59 @@ if __name__ == "__main__":
         writekmer(refdict, refoutfile)
         
         ## Files used
-        process_filesused(trigger=args.filename, filesused=refsused, outdir=args.outdir+'reference_')
+        trigger = 'reference_'+args.filename if args.filename is not None else None
+        process_filesused(trigger=trigger, filesused=refsused, outdir=args.outdir)
 
 
 
 
-## PLOTTING
-#singleTableKmerPlot(kmerdict)
-#singleTableKmerHist(kmerdict)
-#if args.reference is not None:
-    #singleTableKmerPlot(refdict)
-    #twoTableKmerPlot(kmerdict, refdict)
-    #twoTableKmer_MA_Plot(kmerdict, refdict)
-    #twoTableKmer_MA_Plot(kmerdict, refdict, scale_to_ref=True, logplot=True)
+
+## TODO:
+## Text file with both kmers, raw counts, medNorm counts, TMM counts, other EdgeR table stuff
+## Fix up EdgeR class to not necessarily make the dict -- can access all values from the R objects directly (have started to implement this)
+##
+        
+## COMPARITIVE ANALYSES
+if do_comparison:
+    ## Median Normalization Approach
+    results =  MedNormAnalysis(kmerdict, refdict)
+    if has_R:
+        #EdgeR
+        edgeR_results = EdgeR(kmerdict, refdict)
+
+
+    ## DETERMINE PLOT SUFFIX 
+    if args.plotfilesuffix is None:
+        sfx = '.pdf'
+    else:
+        if '.' in args.plotfilesuffix:
+            ## assumes format words.ext, makes sfx = _words.ext
+            sfx = '_' + args.plotfilesuffix
+        else:
+            ## assumes image type specified (e.g. pdf, jpg, png)
+            sfx = '.' + args.plotfilesuffix
+    make_name = make_name_function(pfx=args.outdir, sfx=sfx)
+
+    ## PLOTTING 
+    singleTableKmerPlot(kmerdict, saveas=make_name('test_kmer_plot'))
+    singleTableKmerHist(kmerdict, saveas=make_name('test_kmer_hist'))
+    if args.reference is not None:
+        singleTableKmerPlot(refdict, saveas=make_name('ref_kmer_plot'))
+        singleTableKmerHist(refdict, saveas=make_name('ref_kmer_hist'))
+        twoTableKmerScatterPlot(kmerdict, refdict, saveas=make_name('raw_scatter_test_v_ref'))
+        twoTableKmer_MA_Plot(results, saveas=make_name('medNorm_MA_plot'))
+        general_scatter(x=results.get_norm_count_avg(), y=results.get_norm_count_diff(), words=results.get_genes(), saveas=make_name('medNorm_scaledToRef_avgCount_v_CountDiffs'), xlab='Average Normalized Counts', ylab='Difference: norm_test - norm_ref')
+        general_scatter(x=results.get_ref_zscores(), y=results.get_test_zscores(), words=results.get_genes(), saveas=make_name('robust_zscore_scatter_test_v_ref'), xlab='Reference Z-scores', ylab='Test Z-scores') 
+        alphabeticalPlot(results.get_logfc(), results.get_genes(), saveas=make_name('alpabeticalKmers_v_mednormlogFC'))
+        gcPlot(results.get_logfc(), results.get_genes(), saveas=make_name('kmerGCcontent_v_mednormlogFC'))
+        compressionPlot(results.get_logfc(), results.get_genes(), saveas=make_name('kmerCompressionLength_v_mednormlogFC'))
+        if has_R:
+            twoTableKmerScatterPlotEdgeR(edgeR_results, saveas=make_name('TMM_scatter_test_v_ref'))
+            volcanoPlot(edgeR_results.get_logfc(), edgeR_results.get_pvalues(), edgeR_results.get_k(), saveas=make_name('TMM_volcano'))
+            smearPlot(edgeR_results.get_logfc(), edgeR_results.get_logcpm(), edgeR_results.get_k(), saveas=make_name('TMM_MA'))
+            alphabeticalPlot(edgeR_results.get_logfc(), edgeR_results.get_k(), saveas=make_name('alpabeticalKmers_v_TMMlogFC'))
+            gcPlot(edgeR_results.get_logfc(), edgeR_results.get_k(), saveas=make_name('kmerGCcontent_v_TMMlogFC'))
+            compressionPlot(edgeR_results.get_logfc(), edgeR_results.get_k(), saveas=make_name('kmerCompressionLength_v_TMMlogFC'))
 
 
 
