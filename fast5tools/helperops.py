@@ -5,6 +5,7 @@ from Bio import SeqIO
 from collections import Counter, defaultdict
 from math import log10, log
 from itertools import product
+import numpy as np
 
 ## Fast5Tools
 from fast5tools.f5class import *
@@ -387,6 +388,47 @@ def kmer_compression(k=6):
     
     
 
+############ DATA PARTITION
+def interpret_base_length(baselen):
+    assert isinstance(baselen,str)
+    if baselen.upper().endswith('KB'):
+        return float(baselen[:-2]) * 1e3
+    elif baselen.upper().endswith('MB'):
+        return float(baselen[:-2]) * 1e6
+    elif baselen[-1].endswith(tuple(str(e) for e in range(10))):
+        return float(baselen)
+    else:
+        return None ## or something else...
+
+def run_collect_lengths(initial_list, readtype, nfiles, random, randomseed, notarlite, fasta, fastq, minlen, maxlen, minq, maxq):
+    ## Tracking files used 
+##    if args.filename is not None:
+##        filesused_h = '.'.join(args.filename.split('.')[:-1]) + '.filesused.fofn'
+    filesused = ''
+    
+    ## Execute:
+    ## TODO: Can just use my FastXFileList class... for fa/fq, but would need to change regex_parseFasta/q stuff
+    lengths = []
+    if fasta:
+        for fa in FileList(initial_list, extension=('.fa','.fasta', '.fna'), keep_tar_footprint_small=(not notarlite), downsample=nfiles, random=random, randomseed=randomseed):
+            filesused += os.path.abspath(fa) + '\n'
+            for rec in SeqIO.parse(fa, 'fasta'):
+                lenghts.append(float(len(fa)))
+    elif fastq:
+        for fq in FileList(initial_list, extension=('.fq','.fastq'), keep_tar_footprint_small=(not notarlite), downsample=nfiles, random=random, randomseed=randomseed):
+            filesused += os.path.abspath(fq) + '\n'
+            for rec in SeqIO.parse(fa, 'fastq'):
+                lengths.append(float(len(fq)))
+    else:
+        #regex_parseFast5(args.fast5, args.type, re_f, re_r, regex_function, outformat=args.outformat, count_gtract=args.numtracts, noreverse=args.noreverse)
+        ## Iterate over fast5s
+        for f5 in Fast5List(initial_list, keep_tar_footprint_small=(not notarlite), filemode='r', downsample=nfiles, random=random, randomseed=randomseed):
+            if meets_all_criteria(f5, readtype, minlen, maxlen, minq, maxq):
+                filesused += f5.abspath + '\n'
+                readtype = define_read_type(f5, readtype)
+                lengths.append( float(f5.get_seq_len(readtype)) )
+    return lengths, filesused
+  
 
     
 
@@ -513,4 +555,139 @@ class MedNormAnalysis(object):
     def get_genes(self):
         return self.final_genes
 
+
+
+
+
+###########
+class DataPartition(object):
+    def __init__(self, x, start, end, by, presorted=False):
+        ''' x = list, start/end/by = int, presorted=bool'''
+        self.sorted = presorted
+        self.data = x
+        self.datalen = len(x)
+        self.start = int(start)
+        self.end = int(end)
+        self.by = int(by)
+        self.initial_call = {'start':start, 'end':end, 'by':by, 'presorted':presorted}
+        self.breaks = [start]
+        self.mids = []
+        self.heights = []
+        self.accum_heights = []
+        self.accum_height = 0
+        self.counts = []
+        self.accum_counts = []
+        self.accum_count = 0
+        self._partition_data()
+
+    def _partition_data(self):
+        if not self.sorted:
+            self.data = sorted(self.data)
+
+        ## Ignore data to left of specified start
+        d_i = 0 #xi
+        while self.data[d_i] < self.start:
+            d_i += 1
+
+        ## Collect info on data from specified start up to specified end
+        s, e, b = self.start + self.by, self.end, self.by
+        breaks = range(s, e, b)
+        if breaks[-1] != e and breaks[-1] == e-b:
+            breaks.append(e)
+        for partition_break in breaks:
+            self.breaks.append( partition_break )
+            prev_break = partition_break - self.by
+            self.mids.append( np.mean([partition_break-1, prev_break]) )
+
+            # If data_index not at the end of data vector, then it is either
+            #   starting at s, OR
+            #   just passed a breakpoint, and starting new info collection
+            # Elif data_index passes both a breakpoint and the END on previous round
+            #   Then 
+            if d_i < self.datalen:
+                height = float(0)
+                count = int(0)
+                while self.data[d_i] < partition_break:
+                    height += float(self.data[d_i])
+                    count += float(1)
+                    d_i += int(1)
+                    if d_i >= self.datalen:
+                        break
+                self.heights.append( height )
+                self.accum_height += height
+                self.accum_heights.append( self.accum_height )
+                self.counts.append( count )
+                self.accum_count += count
+                self.accum_counts.append( self.accum_count )
+            else: ## correct??????????????
+                self.heights.append( 0 )
+                self.accum_heights.append( self.accum_height )
+                self.counts.append( 0 )
+                self.accum_counts.append( self.accum_count )
+                              
+
+        self.total_height = np.sum(self.data)
+        self.total_counts = self.datalen
+        self.total_height_of_subset = self.accum_heights[-1]
+        self.total_counts_in_subset = self.accum_counts[-1]
+
+    def get_breaks(self):
+        return self.breaks
+    def get_mids(self):
+        return self.mids
+    def get_heights(self):
+        return self.heights
+    def get_cum_heights(self):
+        return self.accum_heights
+    def get_counts(self):
+        return self.counts
+    def get_cum_counts(self):
+        return self.accum_counts
+    def get_total_height(self):
+        return self.total_height
+    def get_total_height_of_subset(self):
+        return self.total_height_of_subset
+    def get_total_counts(self):
+        return self.total_counts
+    def get_total_counts_in_subset(self):
+        return self.total_counts_in_subset
+    ##
+    def get_proportion_total_height(self):
+        return list(np.array(self.heights)/self.total_height)
+    def get_proportion_total_counts(self):
+        return list(np.array(self.counts)/self.total_counts)
+    def get_proportion_cum_total_height(self):
+        return list(np.array(self.accum_heights)/self.total_height)
+    def get_proportion_cum_total_counts(self):
+        return list(np.array(self.accum_counts)/self.total_counts)
+    ##
+    def get_bases_per_mb(self):
+        return list(1e6 * np.array(self.heights)/self.total_height)
+    def get_cum_bases_per_mb(self):
+        return list(1e6 * np.array(self.accum_heights)/self.total_height)
+    def get_counts_per_million(self):
+        return list(1e6 * np.array(self.counts)/self.total_counts)
+    def get_cum_counts_per_million(self):
+        return list(1e6 * np.array(self.counts)/self.total_counts)
+    ##
+    def get_difference_in_proprtional_counts(self, other):
+        ''' other is another DataPartition object'''
+        return list(np.array(self.get_proportion_total_counts()) - np.array(other.get_proportion_total_counts()))
+    
+    def get_fold_change_of_proportional_counts(self, other, pseudo=1):
+        return list( (np.array(self.get_proportion_total_counts()) + 1) / (np.array(other.get_proportion_total_counts()) + 1) )
+
+    def get_log_fold_change_of_proportional_counts(self, other, pseudo=1, base=2):
+        return list( logbase(np.array(self.get_fold_change_of_proportional_counts(other, pseudo)), base) )
+
+    ##
+    def get_difference_in_proprtional_heights(self, other):
+        ''' other is another DataPartition object'''
+        return list(np.array(self.get_proportion_total_height()) - np.array(other.get_proportion_total_height()))
+    
+    def get_fold_change_of_proportional_heights(self, other, pseudo=1):
+        return list( (np.array(self.get_proportion_total_height()) + 1) / (np.array(other.get_proportion_total_height()) + 1) )
+
+    def get_log_fold_change_of_proportional_heights(self, other, pseudo=1, base=2):
+        return list( logbase(np.array(self.get_fold_change_of_proportional_heights(other, pseudo)), base) )
 
