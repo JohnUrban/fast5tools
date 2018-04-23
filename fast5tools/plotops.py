@@ -119,7 +119,7 @@ def choose_kmer_plot(kmerdict=False, refdict=False, gg=False):
 
 
 
-def singleTableKmerHist(kmercounts, density=False, cumulative=False):
+def singleTableKmerHist(kmercounts, density=False, cumulative=False, saveas=False):
     ''' kmerdict is a defaultdict(int)
         It can take both empty and non-empty kmerdicts
         returns update of the input kmerdict given the input string and k'''
@@ -127,9 +127,13 @@ def singleTableKmerHist(kmercounts, density=False, cumulative=False):
     numKmers = len(kmerdict)
     data = kmerDictToPlotData(kmerdict)
     n, outbins, patches = plt.hist(x=data['counts'], density=density, cumulative=cumulative)
-    plt.show()
+    if saveas:
+        plt.savefig(saveas)
+    else:
+        plt.show()
+    plt.close()
     
-def singleTableKmerPlot(kmercounts):
+def singleTableKmerPlot(kmercounts, saveas=False):
     ''' kmerdict is a defaultdict(int)
         It can take both empty and non-empty kmerdicts
         returns update of the input kmerdict given the input string and k'''
@@ -137,11 +141,15 @@ def singleTableKmerPlot(kmercounts):
     numKmers = len(kmerdict)
     data = kmerDictToPlotData(kmerdict)
     plt.bar(x=range(1,numKmers+1), height=data['counts'], width=1.0)
-    plt.show()
+    if saveas:
+        plt.savefig(saveas)
+    else:
+        plt.show()
+    plt.close()
     
 
 
-def twoTableKmerScatterPlot(kmercounts, refcounts, saveas=None):
+def twoTableKmerScatterPlot(kmercounts, refcounts, saveas=False):
     ''' kmerdict is a defaultdict(int)
         It can take both empty and non-empty kmerdicts
         returns update of the input kmerdict given the input string and k'''
@@ -159,12 +167,143 @@ def twoTableKmerScatterPlot(kmercounts, refcounts, saveas=None):
     plt.xlabel('Reference')
     plt.ylabel('Test')
 
-    if saveas is not None and (saveas.endswith(".pdf") or saveas.endswith(".jpg")):
-            plt.savefig(saveas)
+    if saveas:
+        plt.savefig(saveas)
     else:
         plt.show()
+    plt.close()
 
-def twoTableKmer_MA_Plot(kmercounts, refcounts, saveas=None, scale_to_ref=False, logplot=False, base=2):
+
+
+
+def general_scatter(x, y, words=False, saveas=False, xlab="", ylab="", s=5, cex='xx-small', marker='.'):
+    plt.scatter(x=x, y=y, s=s, marker=marker)
+    if words:
+        for i in range(len(words)):
+            plt.annotate(words[i], (x[i], y[i]), size=cex)
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+    plt.autoscale()
+    if saveas:
+        plt.savefig(saveas)
+    else:
+        plt.show()
+    plt.close()
+
+
+
+def twoTableKmer_MA_Plot(medNormObj, base=2, saveas=False, s=5, cex='xx-small'):
+    x = medNormObj.get_logavg(base)
+    y = medNormObj.get_logfc(base)
+    k = medNormObj.get_genes()
+    xlab = 'Average Log' + str(base) + ' Counts'
+    ylab = 'Log' + str(base) + ' Fold Change'
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+    
+
+def volcanoPlot(logfc, p, k, saveas=False, xlab="log2(Fold Change)", ylab="-log10(p-value)", s=5, cex='xx-small'):
+    '''
+    logfc is expected to be log fold-changes
+    p is expected to be p-values
+    '''
+    x = [e for e in logfc]
+    y = [-1*log10(e) for e in p]
+    #y = -1*logbase(p,base=10)
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+
+def smearPlot(logfc, logcpm, k, saveas=False, xlab="log2(CPM)", ylab="log2(Fold Change)", s=5, cex='xx-small'):
+    '''
+    logfc is expected to be log fold-changes
+    logcpm is expected to be log counts per million (I think)
+    smearplot in poreminion was x=logfc, y=logcpm.
+    But logcpm is the log average over both groups.
+    Thus logcpm vs logfc is essentially an MA plot.
+    So the old smear plot was just an MA plot forcing you to turn your head.
+    
+    '''
+    x = [e for e in logcpm]
+    y = [e for e in logfc]
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+
+def alphabeticalPlot(y, k, saveas=False, xlab="kmer", ylab="log2(FC)", s=5, cex='xx-small'):
+    '''Assumes given x is in same order as k.
+        Example of y = logfc'''
+    x = range(len(k))
+    k, y = zip(*sorted(zip(k,y)))
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+def gcPlot(y, k, saveas=False, xlab="Percent GC", ylab="log2(FC)", s=5, cex='xx-small'):
+    '''Assumes given x is in same order as k.
+        Example of y = logfc'''
+    x = [gcbases(e) for e in k]
+    x, k, y = zip(*sorted(zip(x,k,y)))
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+def complexityPlot(y, k, saveas=False, xlab="Percent GC", ylab="log2(FC)", s=5, cex='xx-small'):
+    '''Assumes given x is in same order as k.
+        Example of y = logfc'''
+    x = [gcbases(e) for e in k]
+    x, k, y = zip(*sorted(zip(x,k,y)))
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+def compressionPlot(y, k, saveas=False, xlab="Compression Length", ylab="log2(FC)", s=5, cex='xx-small'):
+    '''Assumes given x is in same order as k.
+        Example of y = logfc'''
+    compress_lens = kmer_compression(k=len(k[0]))
+    x = [compress_lens[e] for e in k]
+    x, k, y = zip(*sorted(zip(x,k,y)))
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+
+def twoTableKmerScatterPlotEdgeR(edgeRobj,saveas=False, xlab="TMM Norm Reference Count", ylab="TMM Norm Test Count", s=5, cex='xx-small'):
+    nc = edgeRobj.get_normalized_counts()
+    x = list(nc[:,0])
+    y = list(nc[:,1])
+    k = list(edgeRobj.get_dge_list_genes())
+    #print x[:10], len(x)
+    #print y[:10], len(y)
+    #print k, len(k)
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex)
+
+
+
+
+
+##### REPLACING SOON
+    
+def median_norm_analysis(kmercounts, refcounts, scale_to_ref=False, log_it=False, base=2):
+    '''This function will/should be replaced by the MedNorm class'''
+    ## read in and equilibrate the 2 kmer count tables
+    kmerdict, refdict = readInTwoKmerTables(kmercounts, refcounts)
+    
+    ## make approp data structures
+    test = kmerDictToPlotData(kmerdict)
+    reference = kmerDictToPlotData(refdict)
+
+    ## Scale Test to Reference
+    test_z, test_med, test_mad = median_normalize(test['counts'])
+    ref_z, ref_med, ref_mad = median_normalize(reference['counts'])
+
+
+    ## Normalize to both ref_spread and ref_median -- this is analogous to comparing z-scores, so makes more sense to me
+    test_z_to_ref = (test_z*ref_mad) + ref_med
+    ref_z_to_ref = (ref_z*ref_mad) + ref_med
+    ## Normalize to just ref_median, retaining test_spread
+    ## test_z = (test_z*test_mad) + ref_med
+
+    ## Can only take log of positive numbers.
+    ## For now this assumes that scaling to the reference returns only positive numbers
+    ## But this needs to be revisited as that assumption can be easily violated
+    log_test_z_to_ref = logbase(test_z, base)
+    log_ref_z_to_ref = logbase(ref_z, base)
+
+    ## Return results - 3 tuples
+    return (test_z, test_med, test_mad), (ref_z, ref_med, ref_mad), (test_z_to_ref, ref_z_to_ref)
+
+
+def twoTableKmer_MA_Plot_(kmercounts, refcounts, saveas=False, scale_to_ref=False, logplot=False, base=2, s=5, cex='xx-small'):
     ''' kmerdict is a defaultdict(int)
         It can take both empty and non-empty kmerdicts
         returns update of the input kmerdict given the input string and k'''
@@ -198,10 +337,7 @@ def twoTableKmer_MA_Plot(kmercounts, refcounts, saveas=None, scale_to_ref=False,
     ## Get difference (y-axis)
     diffs = test_z - ref_z
 
-    ## Scatter
-    plt.scatter(x=avg_z, y=diffs, s=10, marker='.')
-    for i in range(len(test['kmers'])):
-        plt.annotate(test['kmers'][i], (avg_z[i],diffs[i]), size='xx-small')
+
 
     ## Handle axis labels
     ylab = 'Difference: Test - Reference'
@@ -212,13 +348,9 @@ def twoTableKmer_MA_Plot(kmercounts, refcounts, saveas=None, scale_to_ref=False,
     if scale_to_ref:
         ylab += '\n(scaled to reference)'
 
-    plt.xlabel(xlab)
-    plt.ylabel(ylab)
 
-    ## Saving/Showing
-    if saveas is not None and (saveas.endswith(".pdf") or saveas.endswith(".jpg")):
-            plt.savefig(saveas)
-    else:
-        plt.show()
-
-
+    ## Scatter
+    x = avg_z
+    y = diffs
+    k = test['kmers']
+    general_scatter(x, y, k, saveas, xlab, ylab, s, cex) ## formerly s=10, now s=5
