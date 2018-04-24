@@ -1,4 +1,4 @@
-# fast5tools
+# fast5tools 0.4
 Tools for working with fast5 files (nanopore data).
 
 
