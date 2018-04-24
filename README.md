@@ -1,5 +1,5 @@
 # fast5tools 0.4
-Tools for working with fast5 files (nanopore data).
+Tools for working with fast5 files (Oxford Nanopore DNA sequencing data).
 
 
 Add the fast5tools dir to your PYTHONPATH.
