@@ -158,24 +158,27 @@ def tarpit(tarchive, fn, arcname=None):
 
 
 
+##def get_all_kmers(k):
+##    if k == 1:
+##        MERS = [''.join(e) for e in itertools.product("ACGT")]
+##    elif k == 2:
+##        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT")]
+##    elif k == 3:
+##        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT")]
+##    elif k == 4:
+##        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT")]
+##    elif k == 5:
+##        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT","ACGT")]
+##    elif k == 6:
+##        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT","ACGT","ACGT")]
+##    else:
+##        MERS = []
+##        ## for all these, can do:
+##        ## MERS= [''.join(e) for e in itertools.product("ACGT", repeat=k)]
+##    return MERS
+
 def get_all_kmers(k):
-    if k == 1:
-        MERS = [''.join(e) for e in itertools.product("ACGT")]
-    elif k == 2:
-        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT")]
-    elif k == 3:
-        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT")]
-    elif k == 4:
-        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT")]
-    elif k == 5:
-        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT","ACGT")]
-    elif k == 6:
-        MERS = [''.join(e) for e in itertools.product("ACGT","ACGT","ACGT","ACGT","ACGT","ACGT")]
-    else:
-        MERS = []
-        ## for all these, can do:
-        ## MERS= [''.join(e) for e in itertools.product("ACGT", repeat=k)]
-    return MERS
+    return [''.join(e) for e in itertools.product("ACGT", repeat=k)]
 
 def initiateDict(MERS):
     kmers = defaultdict(dict)

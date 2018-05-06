@@ -1,0 +1,216 @@
+Version 0.4 - Bumped up on 2018-04-23
+- Remaining poreminion functionalities incorporated to various fast5tool scripts in bin:
+	- fast5ReadLengthPlots.py
+	- fast5_qual_histogram.py
+	- fast5_qual_v_pos_boxplot.py
+	- fast5_regex_parser.py
+	- fast5attributes.py
+	- fast5staypos.py
+	- kmerCountsFromFastx.py
+- This also involved updating various fast5tool library scripts in fast5tools/
+	- f5class.py
+	- f5ops.py
+	- fileListClass.py
+	- helperops.py
+- And adding:
+	- edgeRops.py
+	- plotops.py
+- In addition to merging poreminion, other things were added/updated:
+	- fast5toplotRaw.py can now also show segmentation of raw data (if segmented events present)
+	- tarlite is now default. no tarlite is needed to turn it off. --tarlite is kept as legacy to not break pipelines.
+	- added kpos and genomic kpos approaches to estimating kmer parameters from Tombo events
+
+Version 0.3 - Bumped up on 2018-02-20 (changes commited between Oct2017-Feb20,2018)
+- Updates to fast5class to support all other updates/changes and to interpret newer fast5s
+- Added tar writing capabilities to scripts that output a lot of files
+- Added fileListClass.py
+- Added kmerParams.py for estimating kmer parameters from Tombo events
+- Added fast5_tombo_extract.py for extracting Tombo events from fast5s
+- Added barcodeclass.py
+- Added fast5_sw_bardecoder.py
+- Added fast5_sw_alignment_viz.py
+- Added samGenomicWindows.py for identifying genomic sequences that underly signal (plus flanks)
+- Added samclass.py
+- Added samops.py
+- Updated fast5plotEvents.py
+- Added fast5plotRaw.py
+- Added fast5toRaw.py
+	
+
+Note: More fast5tools development was relatively inactive during most of 2017 until October.
+
+Fast5tools Version 0.0.2b - Unofficial bump up from 0.0.2 (July2016 - January 2017)
+- Updates to fast5tools to support other changes/updates and/or new or problematic fast5s
+- Fixes to various scripts
+- Added --tarlite option for allowing tarballs full of fast5s to be operated on w/o extracting all of the files at once
+- Updated tempdir naming to prevent collisions between parallel operations in same dir
+- Updated fast5stats.py
+- Added fast5standardSummary.py and standard table example in rundata/
+- Added rundata/fastx/ and other new subdirs for various examples/tests
+- Added fast5DerivedFastxMoleculeStats.py
+- Added filterFast5DerivedFastx.py
+- Added fxclass.py
+- Added falcon-compatible fasta options (f5class, fast5tofastx, f5ops)
+- Added extra rundata examples
+
+Fast5tools Version 0.0.2 - July 6, 2016 
+- Updates to fast5tools to support other changes/updates and new or problematic fast5s
+- Removed tests.sh (replaced by unit tests)
+- Packaged and reorganized fast5tools directory structure
+- Updates to f5class to deal with problem fast5s
+- Updates to fast5toEvents filenaming
+- Adjusted f5class filebasenmae
+- Update to fast5stats (verbose option to help debugging)
+- Update fast5plot 
+- Added fast5plotEvents
+- Added parsedEventsClass.py (merged from squiggler, though not doing much with it at the moment)
+- Added tools.py (some miscellaneous helper tools)
+- Added hmm_class.py (merged from squiggler, though not doing much with it at the moment)
+
+
+
+Fast5tools Version 0.0.1 -- Initial Commit - June 2, 2016 (Developed by JohnUrban during Jan2016-June2016)
+- README
+- License
+- rundata tests
+- testf5class.py
+- test.sh
+- fast5tofastx.py
+- fast5toModelInfo.py
+- fast5toEvents.py
+- fast5stats.py
+- fast5plot.py
+- fast5filenames.py
+- fast5TableSummary.py
+- fast5SetDifference.py
+- f5tableops.py
+- f5class.py
+- f5ops.py
+
+### FAST5TOOLS
+
+
+Fast5tools evolved from poreminion - therefore the poreminion version history is documented below.
+
+Poreminion 0.4.4 -- July 24, 2015
+Updated:
+- fragsummary: 
+   --> reports on molecules >50kb and >100kb now (in addition to >10kb)
+   --> some print out variables needed to be fixed
+- g4/regex
+  --> g4/regex call on a lot of the same code. some updates to g4 broke the more general usage of regex. now fixed.
+Other notes:
+- since last version updates to fragstats, fragsummary, info, and main were made
+- a license was added
+- a citation was added to be used when citing poreminion
+
+Poreminion 0.4.3 -- May 5, 2015
+Updated:
+- g4: now can count number of g-tracts inside identified g4 motif
+
+
+Poreminion 0.4.2 -- April 28, 2015
+Added subcommand:
+- seqlen: print seqname,seqlen for chosen read types in set of fast5 files.
+
+
+
+Poreminion 0.4.1 -- April 27, 2015
+Added subcommands:
+- staypos: BED file type output of where stays (move = 0) are in template and complement sequences (by mapping moves to appropriate sequence index)
+
+Updated:
+- some of the under-the-hood: e.g. a lot of functions moved to info.py from other files to help avoid import conflicts
+
+
+
+Poreminion 0.4.0 -- April 27, 2015
+Added subcommands:
+- regex: look for regular expressions in minION reads
+- g4: look for g4 motifs in minION reads
+
+Updated:
+- fragstats now allows collection of g4 counts in rast5 read types
+
+
+
+Poreminion 0.3.2 -- April 23, 2015
+- fragsummary
+	- performs more summarizing now (more to come)
+ 
+Poreminion 0.3.1 -- April 23, 2015
+Added:
+- fragsummary -- summarizes a fragstats table file -- lots of useful info. 0.3.2 will have even more info from fragstats summarized.
+- fragrobust -- robust calculation -- caution: this is somewhat useless (see message that comes with it) and may be removed in next bump.
+- info -- gathers a bunch of info from a given fast5 file
+
+Updated:
+- fragstats
+  --> has2d and hascomp fields are now 1 and 0 instead of "True" and "False"
+  --> no longer computes "robustness" as this metric is somewhat useless. For now, I kept it as its own subcommand "fragrobust". Be sure to see the message there.
+  --> computes a bunch of new stuff even in non-extensive mode that do not much affect the speed (columns and metrics below):
+	--> 15 = channel number molecule traversed
+	--> 16 = heat sink temperature while molecule traversed
+	--> 17 = num called template events (after events pruned during base-calling)
+	--> 18 = num called complement events (after events pruned during base-calling)
+	--> 19 = num skips in template
+	--> 20 = num skips in complement
+	--> 21 = num stays in template
+	--> 22 = num stays in complement
+	--> 23 = strand score template
+	--> 24 = strand score complement
+	--> 25 = num stutters in template
+	--> 26 = num stutters in complement
+
+What I know is coming in 0.3.2:
+- fragsummary will be more fully fleshed out, summarizing pieces of fragstats tables that the current version does not do yet
+
+
+
+
+
+Poreminion 0.3.0 -- April 21, 2015
+More subtools added such as:
+- nx (example use: calculate n50 on file column)
+- events (example use: print events from a fast5)
+- has2D (example use: get True/False 2D info on each file in set of basecalled fast5 files in 2 column output)
+- timetest (example use: after filtering base-called files for those that weren't base-called, further filter for files with the known time error (rare and will soon be fixed).)
+
+Updated:
+- fragstats 
+    --> has an extensive option that gives much more info, but takes longer
+    --> has a timetest option
+
+Unfinished subtools (that appeared by name only in previous versions although they did not do anything) have been removed (at least for now).
+
+What I know is upcoming in 0.3.1
+- update dataconc to be faster -- no need for pandas
+- summarizing fragstats files
+- plotting fragstats files
+
+
+
+
+Poreminion 0.2.0 - Feb 24, 2015
+More subtools added such as:
+qualdist,winner,pct2d,uncalled
+-- winner is from poretools, but I enabled a type called "each" to give winners for each read type and an option called --details to only give lengths, not sequence.
+-- pct2d goes through all reads in a dir and returns % that have 2D sequences
+-- uncalled goes through a dir, finds files that are not base-called and either reports them or moves them to a different dir
+Warning: I only work on poreminion every once in a while and some tools are un-finished and/or broken.
+Current tools I know to work are:
+	- data_conc
+	- qualpos
+	- qualdist
+	- kmer
+	- kmerplot 
+	- kmerdiff
+	- winner
+	- pct2d
+	- uncalled
+	- numevents
+The 'align' subtool is something I tooled with, which was just going to be a wrapper over various aligners. I believe it is not in working order.
+Others such as events_stats, get_events, get_model, get_metadata are also un-finished. I have similar functions in another suite that I will make available soon.
+
+
+Poreminion 0.1.0 - Initial Commit - October 15, 2014
