@@ -8,11 +8,17 @@ Add fast5tools/bin to your PATH
 Try:
 
 $ git clone https://github.com/JohnUrban/fast5tools.git
+
 $ cd fast5tools
+
 $ FAST5TOOLS=${PWD}
+
 $ FAST5TOOLSPATHS=${FAST5TOOLS}:${FAST5TOOLS}/bin:${FAST5TOOLS}/fast5tools
+
 $ export PATH=${FAST5TOOLSPATHS}:$PATH
+
 $ export PYTHONPATH=${FAST5TOOLSPATHS}:$PYTHONPATH
+
 $ python setup.py test
 
 This will test various fast5 files in rundata/ that span from the beginning of MAP to recently. It is actually running tests/testf5\_class.py on them. 
