@@ -23,7 +23,7 @@ parser_input.add_argument('--sam', '-s',
                    type= str, default=False,
                    help='''Input file in SAM format.''')
 
-parser_input.add_argument('--prefix', '-p',
+parser.add_argument('--prefix', '-p',
                    type=str, default=False,
                    help='''To name some out files.... e.g. readsPrefix''')
 
