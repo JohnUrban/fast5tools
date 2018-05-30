@@ -1066,6 +1066,7 @@ class SplitReadSamRecord(object):
         D = self.get_sum_cigar_deletions_from_ref()
         M = sum([record.get_cigar_counts('M') for record in self.records])
         I = sum([record.get_cigar_counts('I') for record in self.records])
+        n_mismatch = MDI - D - I - n_match
 ##        Ud = U - U*M/float(MDI) - U*I/float(MDI)
         MDIUD = MDIU + U*D/float(MDI)
         PROP_U = U*M/float(MDI) + U*I/float(MDI) + 2*U*D/float(MDI)
@@ -1075,8 +1076,9 @@ class SplitReadSamRecord(object):
         scaled_aln_only = self.get_pct_of_read_aligned() * n_match / MDI
         with_unaln_accounting_for_dels = 100.0 * n_match / MDIUD
         alt = 100.0 * n_match / MDI_PROPU
-        return with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt
-        
+        outdict = {'pctid':[with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt], 'match':n_match, 'mismatch':n_mismatch, 'del':D, 'ins':I, 'MDI':MDI, 'unaligned':U, 'MDIU':MDIU}
+        #return with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt
+        return outdict
 
     def get_pct_identity_proxy(self):
         ''' Proxy is "(read_len-NM)/read_len" as described above in pct_identity blurb.
