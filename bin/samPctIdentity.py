@@ -83,6 +83,6 @@ Proportion Imperfect Alignments = %f
 if not args.prefix:
     sys.stderr.write(perfectMsg)
 else:
-    with open(args.prefix + '.summary.txt') as f:
+    with open(args.prefix + '.summary.txt', 'w') as f:
         f.write(perfectMsg)
 
