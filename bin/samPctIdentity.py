@@ -23,7 +23,9 @@ parser_input.add_argument('--sam', '-s',
                    type= str, default=False,
                    help='''Input file in SAM format.''')
 
-
+parser_input.add_argument('--prefix', '-p',
+                   type=str, default=False,
+                   help='''To name some out files.... e.g. readsPrefix''')
 
 ## FOR NOW, MUST BE SAM -- NOT BAM -- but can be STDIN SAM
 ##parser_input.add_argument('--bam', '-b',
@@ -76,4 +78,11 @@ Total Imperfect Alignments = %d
 Proportion Perfect Alignments = %f
 Proportion Imperfect Alignments = %f
 ''' % (total, totalAligned, totalPerfect, totalImperfect, float(totalPerfect)/totalAligned, float(totalImperfect)/totalAligned)
-sys.stderr.write(perfectMsg)
+
+
+if not args.prefix:
+    sys.stderr.write(perfectMsg)
+else:
+    with open(args.prefix + '.summary.txt') as f:
+        f.write(perfectMsg)
+
