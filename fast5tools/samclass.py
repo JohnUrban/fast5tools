@@ -2051,6 +2051,7 @@ class MpileupRecord(object):
         self.pattern = pattern
         self.seq, self.pos, self.ref, self.depth, self.composition, self.quals = rec.strip().split()
         self.counts = self._get_composition_counts(self.composition, self.ref, self.trantab, self.pattern, self.depth)
+        
 
     def equal_or_above_threshold(self, threshold=1.0, stringency=1, strand=0):
         ''' stringency levels 1,2,3:
@@ -2135,6 +2136,7 @@ class MpileupRecord(object):
         
     def _get_composition_counts(self, composition, ref, trantab, pattern, depth):
         ''' Provide composition string.'''
+        ref=ref.upper()
         symbols = '=XDIACGTN^$0' ## Right now '0' represents the 'deletion boundary' -[0-9]+[ACGTNacgtn]+ that occur before deletions (not on them).
         plus = {k:0 for k in symbols[:-2]}
         minus = {k:0 for k in symbols[:-2]}
