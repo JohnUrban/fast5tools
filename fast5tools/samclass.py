@@ -2076,7 +2076,7 @@ class MpileupRecord(object):
         return int(self.depth) > mindepth
     
     def __str__(self):
-        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
+        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
         counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
         ends = ['rI', 'bI', '^', '$' ]
         symbols = counts + probs + ends
@@ -2092,7 +2092,7 @@ class MpileupRecord(object):
     
     def _get_probs(self, d):
         if sum(d.values()) > 0:
-            #['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']  
+            #['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']  
             ## Prob that a read has Match, Mismatch, or Deletion wrt reference (No need to include insertions here)
             marg2_total = float(d['='] + d['X']) #Only % match or mismatch
             marg1_total = float(marg2_total + d['D']) # % match or mismatch or del
@@ -2128,7 +2128,7 @@ class MpileupRecord(object):
             d['marg2_pG'] = float(d['G'])/new_marg2_total
             d['marg2_pT'] = float(d['T'])/new_marg2_total
         else:
-            for e in ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']:
+            for e in ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']:
                 d[e] = '.'
 
         return d
@@ -2246,7 +2246,7 @@ class Mpileup(object):
             self.mpileup.close()
     def header(self):
         pos = ['chr', 'pos', 'ref', 'depth']
-        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
+        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
         counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
         ends = ['rI', 'bI', '^', '$' ]
         nonstranded = counts + probs + ends
