@@ -1,6 +1,7 @@
 import os, sys, re, pybedtools, pandas, operator
 from collections import defaultdict
 import numpy as np
+from string import maketrans
 
 isthis = {'gt':operator.gt, 'ge':operator.ge, 'lt':operator.lt, 'le':operator.le, 'eq':operator.eq, 'ne':operator.ne} 
 
@@ -604,7 +605,6 @@ class SamRecord(object):
 
 
 
-
 ### SPLIT ALN ANALYSES
 ### E.g. BWA can align long reads across multiple records
 ### The SamSplitAlnAggregator class inherits most of the Sam class
@@ -707,6 +707,7 @@ class SplitReadSamRecord(object):
         self.pct_aln = None
         self.pct_unaln = None
         self.alncounts = None
+        self.pct_id = None
 
     def get_read_name(self):
         if self.readname is None:
@@ -1059,6 +1060,8 @@ class SplitReadSamRecord(object):
         # GLOBAL: 100 * (MDI - NM) / (MDI + n_unaligned)
         # SUMLOCAL: 100 * (MDI - NM) / (MDI)
         # SCALED_LOCAL: pct_aligned_bases * (MDI - NM) / (MDI) = 100 * A/(U+A) * (MDI-NM) / NM 
+        if self.pct_id is not None:
+            return self.pct_id
         MDI = self.get_sum_MDI_alignment_lengths()
         n_match = MDI - self.get_total_edit_dist()
         U = self.get_number_bases_in_read_not_aligned()
@@ -1076,9 +1079,9 @@ class SplitReadSamRecord(object):
         scaled_aln_only = self.get_pct_of_read_aligned() * n_match / MDI
         with_unaln_accounting_for_dels = 100.0 * n_match / MDIUD
         alt = 100.0 * n_match / MDI_PROPU
-        outdict = {'pctid':[with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt], 'match':n_match, 'mismatch':n_mismatch, 'del':D, 'ins':I, 'MDI':MDI, 'unaligned':U, 'MDIU':MDIU}
+        self.pct_id = {'pctid':[with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt], 'match':n_match, 'mismatch':n_mismatch, 'del':D, 'ins':I, 'MDI':MDI, 'unaligned':U, 'MDIU':MDIU}
         #return with_unaln, scaled_aln_only, aln_only, with_unaln_accounting_for_dels, alt
-        return outdict
+        return self.pct_id
 
     def get_pct_identity_proxy(self):
         ''' Proxy is "(read_len-NM)/read_len" as described above in pct_identity blurb.
@@ -1449,7 +1452,7 @@ class SplitReadSamRecord(object):
         end = sorted(d['end'])[-1]
         return (chrom, start, end)
 
-    def get_merge_with_max_spanning_alignment(self, idx, require_order=False, require_strand=False):
+    def get_merge_with_max_spanning_alignment(self, idx, require_order=False, require_strand=False, return_max_span_aln_tuple=False):
         ''' idx = doctionary output of get_index_from_merged_tuples().
             require_order = when True, output from alignments_ordered_like_read() must be True to be considered a valid merge.
             require_strand = when True, output from alignments_on_same_strand() must be True to be considered a valid merge.
@@ -1473,14 +1476,18 @@ class SplitReadSamRecord(object):
             if merge_span_len > max_span_len and same_order_as_read and same_strand:
                 max_span_len = merge_span_len
                 max_span_i = merge_i
+                max_span_aln_tuple = span_coords
 ##        print 111, max_span_i
 ##        print 111, max_span_len
-        return (max_span_i, max_span_len)
+        if not return_max_span_aln_tuple:
+            return (max_span_i, max_span_len)
+        else:
+            return (max_span_i, max_span_len, max_span_aln_tuple)
                 
 
                 
 
-    def get_genomic_window(self, flank=0.1, merge_dist=0, majority=0.5, require_order=False, require_strand=False):
+    def get_genomic_window(self, flank=0.1, merge_dist=0, majority=0.5, require_order=False, require_strand=False, adjust_for_clipping_in_output=True):
         '''Returns 3-tuple'''
         '''flank = as in get_genomic_window_around_alignment() described below'''
         ''' merge_dist = d from self.merge(): allows a gap up to d between intervals to still be an overlap - default 0
@@ -1501,7 +1508,7 @@ class SplitReadSamRecord(object):
         if self.has_alignments():
             alnstring = self.get_per_base_align_status_for_read()
             pctaln = self.get_pct_of_read_aligned()
-            pctid = self.get_pct_identity()[0]
+            pctid = self.get_pct_identity()['pctid'][0]
             pctstr = 'pctid:' + str(pctid) + '|pctaln:' + str(pctaln) + '|alnstring:' + alnstring
         if not self.has_alignments():
 ##            print -1
@@ -1509,14 +1516,19 @@ class SplitReadSamRecord(object):
         elif self.get_num_aln() == 1: ## although get_num_aln() will report 1 for unaligned SAM records, those are taken care of above.
 ##            print 0
             AS = self.get_record(0).get_AS_field()
+            ## adjust_for_clipping needs to be "False" for "length" b/c determining alignment coords/length on reference
             length = self.determine_window_length( self.get_record(0).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=0) )
             identifier = 'single_alignment|numaln:' + str(self.get_num_aln()) + '|longest_aln:' + str(length) + '|AS:' + str(AS) + '|' + pctstr
-            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=identifier)
+            ## adjust_for_clipping should be "True" below (and there ought to be some flank) if you are trying to extract a genomic window that definitely subsumes the read.
+            ##      Therefore, it uses the variable that defaults to "True". Setting to "False" will just return the alignment coords.
+            ##      return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=identifier)
+            return self.get_record(0).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=adjust_for_clipping_in_output, identifier=identifier)
         elif self.get_num_aln() > 1:
 ##            print 1
             genomic_windows = []
 ##            bedstr = ''
             for i in range(self.get_num_aln()):
+                ## adjust_for_clipping should be "False" below in order to see if the flanks inferred by clip lengths results in grouping more than 1 alignment.
                 gw = self.get_record(i).get_genomic_window_around_alignment(flank=flank, adjust_for_clipping=True, identifier=i) 
                 genomic_windows.append( gw )
 ##                bedstr = chrom + "\t" + str(gw[0]-1) + "\t" + str(gw[1])
@@ -1525,7 +1537,7 @@ class SplitReadSamRecord(object):
 ##            merged = bedtool.merge(d=merge_dist)
             #python-only approach
             sorted_genomic_windows = sorted(genomic_windows) ## use sorted not .sort(), so can access genomic_windows below
-            gw_merge = self.merge(l=sorted_genomic_windows, d=merge_dist)
+            gw_merge = self.merge(l=sorted_genomic_windows, d=merge_dist) ## merge uses overlap detection that requires sorted coords
             num_after_merge = len(gw_merge)
             if num_after_merge == 1:
 ##                print 2,1
@@ -1534,6 +1546,7 @@ class SplitReadSamRecord(object):
                 #get aln information
                 split_alignments = []
                 for i in range(self.get_num_aln()):
+                    ## adjust_for_clipping needs to be "False" for "length" b/c determining alignment coords/length on reference
                     ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
                     split_alignments.append( ref_coords )
                 split_aln_lengths = self.determine_window_lengths(split_alignments)
@@ -1549,7 +1562,8 @@ class SplitReadSamRecord(object):
                 
                 #get merge information
                 merge_idx_dict = self.get_indexes_from_merged_tuples(gw_merge)
-                merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
+                #merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
+                merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand, return_max_span_aln_tuple=True)
                 sam_idx_list = merge_idx_dict[merge_with_max_spanning_aln[0]]
                 same_order_as_read = self.alignments_ordered_like_read(sam_idx_list)
                 same_strand = (',').join( [str(e) for e in self.alignments_on_same_strand(sam_idx_list)] )
@@ -1565,7 +1579,10 @@ class SplitReadSamRecord(object):
 
                 identifier = 'single_merged_window|numaln:' + str(self.get_num_aln()) + '|' +  merge_label + '|' + split_alignment_label + '|' + pctstr
                 
-                single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
+                if not adjust_for_clipping_in_output:
+                    single_merged_window = (merge_with_max_spanning_aln[2][0], merge_with_max_spanning_aln[2][1], merge_with_max_spanning_aln[2][2], identifier)
+                else:
+                    single_merged_window = (gw_merge[0][0], gw_merge[0][1], gw_merge[0][2], identifier)
                 return single_merged_window
             elif num_after_merge > 1:
 ##                print 2,2
@@ -1588,6 +1605,7 @@ class SplitReadSamRecord(object):
                 ####    Best might be as a % of total alignment length MD=X.
                 split_alignments = []
                 for i in range(self.get_num_aln()):
+                    ## adjust_for_clipping needs to be "False" for "length" b/c determining alignment coords/length on reference
                     ref_coords = self.get_record(i).get_genomic_window_around_alignment(flank=0, adjust_for_clipping=False, identifier=i) 
                     split_alignments.append( ref_coords )
                 split_aln_lengths = self.determine_window_lengths(split_alignments)
@@ -1620,6 +1638,7 @@ class SplitReadSamRecord(object):
 ##                        print 5,2
                         ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
                         identifier = 'longest_alignment|' + split_alignment_label + '|' + pctstr
+                    ## chosen alignment is already adjusted for clipping OR NOT b/c it comes from "genomic_windows" which is
                     chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
                     return chosen_alignment_genomic_window
                 else:
@@ -1635,7 +1654,8 @@ class SplitReadSamRecord(object):
                     # determine if a given merge is interesting:
                     # -- note require_strand and require_order should be false for now. Noise and other artifacts can cause the ignoring of an actually valid merge.
                     #   potentially better to just add that information to identifier-string        
-                    merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
+                    #merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand)
+                    merge_with_max_spanning_aln = self.get_merge_with_max_spanning_alignment(idx=merge_idx_dict, require_order=require_order, require_strand=require_strand, return_max_span_aln_tuple=True)
 
                     if merge_with_max_spanning_aln[0] is not None: ## (i,j): i = False when no valid merges, merge_idx when there is; j = span_len
 ##                        print 7,1
@@ -1653,7 +1673,10 @@ class SplitReadSamRecord(object):
                         merge_label = 'num_aln_in_merge:' + str(len(sam_idx_list)) + '|same_order_as_read:' + str(same_order_as_read) + '|same_strand:' + str(same_strand) + '|span_len:' + str(merge_with_max_spanning_aln[1]) + '|sum_mergealn_len:' + str(sum_aln) + '|sum_mergealn_len_gt_longest_aln:' + str(sum_aln_gt_longest) + '|longest_aln_in_merge:' + str(longest_in_merge) + '|sum_merge_AS:' + str(sum_AS) + '|sum_merge_AS_gt_AS_of_longest_aln:' + str(sum_AS_gt_longest_AS) + '|sum_merge_AS_gt_highest_AS:' + str(sum_AS_gt_highest_AS) + '|merge_alnstring:' + merge_alnstring + '|merge_alnstring_sam_as_alnstring:' +  str(mergealnstr_sam_as_alnstr)
                         if merge_with_max_spanning_aln[1] > longest_aln:
 ##                            print 8,1
-                            chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
+                            if not adjust_for_clipping_in_output:
+                                chosen_genomic_window = (merge_with_max_spanning_aln[2][0], merge_with_max_spanning_aln[2][1], merge_with_max_spanning_aln[2][2])
+                            else:
+                                chosen_genomic_window = gw_merge[merge_with_max_spanning_aln[0]]
                             if split_alignment_majority is not False:
 ##                                print 9,1
                                 identifier = 'longest_merge_span_gt_majority_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
@@ -1669,6 +1692,7 @@ class SplitReadSamRecord(object):
                             else:
 ##                                print 9,4
                                 identifier = 'longest_merge_span_lt_longest_aln|' + merge_label + '|' + split_alignment_label + '|' + pctstr
+                        ## chosen_genomic_window is already adjusted for clipping OR NOT b/c it comes from "genomic_windows" which is
                         chosen_genomic_window = (chosen_genomic_window[0], chosen_genomic_window[1], chosen_genomic_window[2], identifier)
                         return chosen_genomic_window
                     else:
@@ -1681,6 +1705,7 @@ class SplitReadSamRecord(object):
                         else:
                             ## return longest ((Other options would be to: return multiple, use alignment scores to pick))
                             identifier = 'longest_alignment|' + split_alignment_label
+                        ## chosen_genomic_window is already adjusted for clipping OR NOT b/c it comes from "genomic_windows" which is
                         chosen_alignment_genomic_window = (chosen_alignment[0], chosen_alignment[1], chosen_alignment[2], identifier)
                         return chosen_alignment_genomic_window
 
@@ -2015,3 +2040,220 @@ def sam_refalnseq_len(x):
 ##
 ##out.close()
 
+
+
+
+### MPILEUP FROM SAMTOOLS ANALYSIS OF BAM
+class MpileupRecord(object):
+    def __init__(self, rec, trantab, pattern, stranded=False):
+        self.stranded=stranded
+        self.trantab = trantab
+        self.pattern = pattern
+        self.seq, self.pos, self.ref, self.depth, self.composition, self.quals = rec.strip().split()
+        self.counts = self._get_composition_counts(self.composition, self.ref, self.trantab, self.pattern, self.depth)
+
+    def equal_or_above_threshold(self, threshold=1.0, stringency=1, strand=0):
+        ''' stringency levels 1,2,3:
+            3 means p(match) = 1 given X=DN (there can only be matches) - no mismatch, no del, no N
+            2 means marg_over_N_p(match) = 1 -- no mismatches, no dels (Ns are ignored)
+            1 means marg_over_N_D_p(match) = 1 -- no mismatches (Ns and dels are ignored)
+            strand: 0=nonstranded, 1=plus,2=minus'''
+        if stringency >= 3:
+            return self.counts[strand]['p='] >= threshold
+        elif stringency < 3 and stringency >= 2:
+            return self.counts[strand]['marg1_p='] >= threshold
+        else: #<=1
+            return self.counts[strand]['marg2_p='] >= threshold
+
+    def perfect(self, stringency=1, strand=0):
+        return self.equal_or_above_threshold(threshold=1.0, stringency=stringency, strand=strand)
+        
+    def has_depth(self):
+        return int(self.depth) > 0
+
+    def has_min_depth(self, mindepth=0):
+        return int(self.depth) > mindepth
+    
+    def __str__(self):
+        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
+        counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
+        ends = ['rI', 'bI', '^', '$' ]
+        symbols = counts + probs + ends
+        nonstranded = [self.counts[0][k] for k in symbols]
+        pos = [self.seq, self.pos, self.ref, self.depth]
+        out = pos + nonstranded
+        if self.stranded:
+            plus = [self.counts[1][k] for k in symbols[:-4]]
+            minus = plus = [self.counts[2][k] for k in symbols[:-4]]
+            out += plus
+            out += minus
+        return '\t'.join([str(e) for e in out])
+    
+    def _get_probs(self, d):
+        if sum(d.values()) > 0:
+            #['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']  
+            ## Prob that a read has Match, Mismatch, or Deletion wrt reference (No need to include insertions here)
+            marg2_total = float(d['='] + d['X']) #Only % match or mismatch
+            marg1_total = float(marg2_total + d['D']) # % match or mismatch or del
+            total = float(marg1_total + d['N']) # % match or mismatch or ambig
+            d['p='] = float(d['='])/total
+            d['pX'] = float(d['X'])/total
+            d['pD'] = float(d['D'])/total
+            d['pN'] = float(d['N'])/total
+            d['marg1_p='] = float(d['='])/marg1_total
+            d['marg1_pX'] = float(d['X'])/marg1_total
+            d['marg1_pD'] = float(d['D'])/marg1_total
+            d['marg2_p='] = float(d['='])/marg2_total
+            d['marg2_pX'] = float(d['X'])/marg2_total
+            ## Prob that a read has A, C, G, T, N, or deletion over reference position
+            ## Deletion prob already defined.
+            new_marg2_total = float(d['A'] + d['C'] + d['G'] + d['T']) # Only % bases
+            new_marg1_total = float(new_marg2_total + d['D']) # % bases or dels
+            new_total = float(new_marg1_total + d['N']) # % bases or dels or ambig
+            assert new_marg2_total == marg2_total and new_marg1_total == marg1_total and new_total == total
+            d['pA'] = float(d['A'])/new_total
+            d['pC'] = float(d['C'])/new_total
+            d['pG'] = float(d['G'])/new_total
+            d['pT'] = float(d['T'])/new_total
+            ## pD should be same as above
+            ## pN should be same as above
+            d['marg1_pA'] = float(d['A'])/new_marg1_total
+            d['marg1_pC'] = float(d['C'])/new_marg1_total
+            d['marg1_pG'] = float(d['G'])/new_marg1_total
+            d['marg1_pT'] = float(d['T'])/new_marg1_total
+            ## marg1_pD should be same as above
+            d['marg2_pA'] = float(d['A'])/new_marg2_total
+            d['marg2_pC'] = float(d['C'])/new_marg2_total
+            d['marg2_pG'] = float(d['G'])/new_marg2_total
+            d['marg2_pT'] = float(d['T'])/new_marg2_total
+        else:
+            for e in ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']:
+                d[e] = '.'
+
+        return d
+
+        
+    def _get_composition_counts(self, composition, ref, trantab, pattern, depth):
+        ''' Provide composition string.'''
+        symbols = '=XDIACGTN^$0' ## Right now '0' represents the 'deletion boundary' -[0-9]+[ACGTNacgtn]+ that occur before deletions (not on them).
+        plus = {k:0 for k in symbols[:-2]}
+        minus = {k:0 for k in symbols[:-2]}
+        nonstranded = {k:0 for k in symbols}
+        refrc = ref.translate(trantab)
+        for pattern_match in re.findall(pattern, composition):
+            #print pattern_match
+            n = len(pattern_match)
+            if pattern_match.startswith('.'): #base match Plus
+                plus[ref] += n
+                nonstranded[ref] += n
+                plus['='] += n
+                nonstranded['='] += n
+            elif pattern_match.startswith(','): #base match Minus
+                minus[refrc] += n
+                nonstranded[ref] += n
+                minus['='] += n
+                nonstranded['='] += n
+            elif pattern_match[0] in 'ACGTN': ## 1 or more mismatches Plus
+    ##            plus['X'] += n
+    ##            nonstranded['X'] += n
+                for b in pattern_match:
+                    if b != 'N': ## N in read will not be considered a mismatch, it will just be considered ambiguous
+                        plus['X'] += 1
+                        nonstranded['X'] += 1
+                    plus[b] += 1
+                    nonstranded[b] += 1
+            elif pattern_match[0] in 'acgtn': ## 1 or more mismatches Minus -- but the lower-case base reflects the plus strand
+    ##            minus['X'] += n
+    ##            nonstranded['X'] += n
+                for b in pattern_match.upper():
+                    if b != 'N': ## N in read will not be considered a mismatch, it will just be considered ambiguous
+                        minus['X'] += 1
+                        nonstranded['X'] += 1
+                    minus[b.upper().translate(trantab)] += 1 ## reflecting composition on reverse strd
+                    nonstranded[b.upper()] += 1
+            elif pattern_match.startswith('*'): ## deletions over position
+                nonstranded['D'] += n
+            elif pattern_match.startswith('-'): ## Deletion boundary -- analogous to how insertions, but not a del over pos
+                nonstranded['0'] += 1
+                if pattern_match[1] in 'ACGTN':
+                    plus['0'] += 1
+                elif pattern_match[1] in 'acgtn':
+                    minus['0'] += 1
+            elif pattern_match.startswith('+'):
+                nonstranded['I'] += 1
+                if pattern_match[1] in 'ACGTN':
+                    plus['I'] += 1
+                elif pattern_match[1] in 'acgtn':
+                    minus['I'] += 1
+            elif pattern_match.startswith('^'): ## read start
+                nonstranded['^'] += 1 ## Only thing I did not have the regex grab more than 1 of... so just add 1
+            elif pattern_match.startswith('$'): ## ends of read segments
+                nonstranded['$'] += n
+
+        ## Calculate proportions/probs from counts
+        nonstranded = self._get_probs(nonstranded)
+        plus = self._get_probs(plus)
+        minus = self._get_probs(minus)
+
+        ## Calculate insertion rate given depth and plus:minus insertion bias ratio
+        nonstranded['rI'] = nonstranded['I']/float(depth)
+        try:
+            nonstranded['bI'] = float((plus['I']-minus['I']))/(plus['I']+minus['I'])
+        except ZeroDivisionError:
+            nonstranded['bI'] = 0.0
+        return (nonstranded, plus, minus)
+    
+class Mpileup(object):
+    def __init__(self, mpileup, stranded=False, header=False, ):
+        self.stranded=stranded
+        self.trantab = maketrans('ACGTacgtNn', 'TGCAtgcaNn')
+        ##pattern = re.compile('\.|,|\^.|\$|[\+|-][0-9]+[A|C|G|T|N|a|c|g|t|n]+')
+        ##pattern = re.compile('\.|,|\^.|\$|[\+|-]?[0-9]*[A|C|G|T|N|a|c|g|t|n]+')
+        #self.pattern = re.compile('\.+|,+|\^.|\$+|[\+|-]?[0-9]*[A|C|G|T|N]+|[\+|-]?[0-9]*[a|c|g|t|n]+')
+        ## Here are important patterns to look for -- 
+        fwd_matches_on_pos = '\.+'
+        rev_matches_on_pos = ',+'
+        readstart_w_mapq_on_pos = '\^.'
+        readends_on_pos = '\$+'
+        dels_on_pos = '\*+'
+        fwd_ins_after_pos = '\+[0-9]*[A|C|G|T|N]+'
+        rev_ins_after_pos = '\+[0-9]*[a|c|g|t|n]+'
+        fwd_del_after_pos = '\-[0-9]*[A|C|G|T|N]+' ## Not doing much with this for now
+        rev_del_after_pos = '\-[0-9]*[a|c|g|t|n]+'
+        fwd_mismatches_on_pos = '[A|C|G|T|N]+' ## patterns are evaluated left to right - tests show that it doesnt mater if these come before or after indels (possible b/c it prefers the greediest one), but it seems safer to keep them after (or combined as below)
+        rev_mismatches_on_pos = '[a|c|g|t|n]+'
+        fwd_insafter_delafter_or_mms = '[\+|-]?[0-9]*[A|C|G|T|N]+'
+        rev_insafter_delafter_or_mms = '[\+|-]?[0-9]*[a|c|g|t|n]+'
+        self.patterns = '|'.join( [fwd_matches_on_pos, rev_matches_on_pos, dels_on_pos, readstart_w_mapq_on_pos, readends_on_pos, fwd_insafter_delafter_or_mms, rev_insafter_delafter_or_mms] )
+        self.pattern = re.compile(self.patterns)
+        if mpileup in ('-', 'stdin'):
+            self.mpileup = sys.stdin
+            self.need_to_close_file = False
+        else:
+            self.mpileup = open(mpileup)
+            self.need_to_close_file = True
+    def __iter__(self):
+        return self
+    def next(self):
+        try:
+            return MpileupRecord(self.mpileup.readline(), self.trantab, self.pattern, self.stranded)
+        except:
+            raise StopIteration
+    def close(self):
+        if self.need_to_close_file:
+            self.mpileup.close()
+    def header(self):
+        pos = ['chr', 'pos', 'ref', 'depth']
+        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_p=', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
+        counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
+        ends = ['rI', 'bI', '^', '$' ]
+        nonstranded = counts + probs + ends
+        preout = pos + nonstranded
+        if self.stranded:
+            plus = ['plus_'+e for e in nonstranded[:-4]]
+            minus = ['minus_'+e for e in nonstranded[:-4]]
+            preout += plus + minus
+        out = [str(i+1)+'='+preout[i] for i in range(len(preout))]
+        return '\t'.join(out)
+
+ 
