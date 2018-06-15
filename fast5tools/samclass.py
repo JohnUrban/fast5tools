@@ -2062,25 +2062,38 @@ class MpileupRecord(object):
             ##  Maybe that is a TODO
             ## -- I'd only add a pseudocount to the match though representing a small belief that the reference was assembled correctly
             ## -- In that sense it is just like counting the reference that was aligned to as one of the alignments
+            ## For now I will look for the ZeroDivisionError and return '.' or NA
             self.counts = self._get_composition_counts(self.composition, self.ref, self.trantab, self.pattern, self.depth)
-        
-
+           
     def equal_or_above_threshold(self, threshold=1.0, stringency=1, strand=0):
         ''' stringency levels 1,2,3:
             3 means p(match) = 1 given X=DN (there can only be matches) - no mismatch, no del, no N
             2 means marg_over_N_p(match) = 1 -- no mismatches, no dels (Ns are ignored)
             1 means marg_over_N_D_p(match) = 1 -- no mismatches (Ns and dels are ignored)
             strand: 0=nonstranded, 1=plus,2=minus'''
+##        if threshold > 1.0: #intended to print all
+##            self.testvalue = -1.0
+##            return False #Nothing above 1
         if stringency >= 3:
-            return self.counts[strand]['p='] >= threshold
+            self.testvalue = self.counts[strand]['p=']
         elif stringency < 3 and stringency >= 2:
-            return self.counts[strand]['marg1_p='] >= threshold
+            self.testvalue = self.counts[strand]['marg1_p=']
         else: #<=1
-            return self.counts[strand]['marg2_p='] >= threshold
+            self.testvalue = self.counts[strand]['marg2_p=']
+        return self.testvalue >= threshold
 
     def perfect(self, stringency=1, strand=0):
         return self.equal_or_above_threshold(threshold=1.0, stringency=stringency, strand=strand)
-        
+
+    def passes_threshold(self, threshold=1.0, stringency=1, strand=0, above=False, reject_undefined=True):
+        if self.equal_or_above_threshold(threshold, stringency, strand):
+            passes = True if above else False
+        else:
+            passes = True if not above else False
+        if self.testvalue is 'NA':
+            passes = False if reject_undefined else True
+        return passes
+
     def has_depth(self):
         return int(self.depth) > 0
 
@@ -2104,7 +2117,12 @@ class MpileupRecord(object):
         else:
             out = []
         return '\t'.join([str(e) for e in out])
-    
+
+    def _catch_zerodivisionerror(self, numerator, denominator):
+        try:
+            return numerator/denominator
+        except ZeroDivisionError:
+            return 'NA'
     def _get_probs(self, d):
         if sum(d.values()) > 0:
             #['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']  
@@ -2112,36 +2130,36 @@ class MpileupRecord(object):
             marg2_total = float(d['='] + d['X']) #Only % match or mismatch
             marg1_total = float(marg2_total + d['D']) # % match or mismatch or del
             total = float(marg1_total + d['N']) # % match or mismatch or ambig
-            d['p='] = float(d['='])/total
-            d['pX'] = float(d['X'])/total
-            d['pD'] = float(d['D'])/total
-            d['pN'] = float(d['N'])/total
-            d['marg1_p='] = float(d['='])/marg1_total
-            d['marg1_pX'] = float(d['X'])/marg1_total
-            d['marg1_pD'] = float(d['D'])/marg1_total
-            d['marg2_p='] = float(d['='])/marg2_total
-            d['marg2_pX'] = float(d['X'])/marg2_total
+            d['p='] = self._catch_zerodivisionerror(float(d['=']), total)
+            d['pX'] = self._catch_zerodivisionerror(float(d['X']), total)
+            d['pD'] = self._catch_zerodivisionerror(float(d['D']), total)
+            d['pN'] = self._catch_zerodivisionerror(float(d['N']), total)
+            d['marg1_p='] = self._catch_zerodivisionerror(float(d['=']), marg1_total)
+            d['marg1_pX'] = self._catch_zerodivisionerror(float(d['X']), marg1_total)
+            d['marg1_pD'] = self._catch_zerodivisionerror(float(d['D']), marg1_total)
+            d['marg2_p='] = self._catch_zerodivisionerror(float(d['=']), marg2_total)
+            d['marg2_pX'] = self._catch_zerodivisionerror(float(d['X']), marg2_total)
             ## Prob that a read has A, C, G, T, N, or deletion over reference position
             ## Deletion prob already defined.
             new_marg2_total = float(d['A'] + d['C'] + d['G'] + d['T']) # Only % bases
             new_marg1_total = float(new_marg2_total + d['D']) # % bases or dels
             new_total = float(new_marg1_total + d['N']) # % bases or dels or ambig
             assert new_marg2_total == marg2_total and new_marg1_total == marg1_total and new_total == total
-            d['pA'] = float(d['A'])/new_total
-            d['pC'] = float(d['C'])/new_total
-            d['pG'] = float(d['G'])/new_total
-            d['pT'] = float(d['T'])/new_total
+            d['pA'] = self._catch_zerodivisionerror(float(d['A']), new_total)
+            d['pC'] = self._catch_zerodivisionerror(float(d['C']), new_total)
+            d['pG'] = self._catch_zerodivisionerror(float(d['G']), new_total)
+            d['pT'] = self._catch_zerodivisionerror(float(d['T']), new_total)
             ## pD should be same as above
             ## pN should be same as above
-            d['marg1_pA'] = float(d['A'])/new_marg1_total
-            d['marg1_pC'] = float(d['C'])/new_marg1_total
-            d['marg1_pG'] = float(d['G'])/new_marg1_total
-            d['marg1_pT'] = float(d['T'])/new_marg1_total
+            d['marg1_pA'] = self._catch_zerodivisionerror(float(d['A']), new_marg1_total)
+            d['marg1_pC'] = self._catch_zerodivisionerror(float(d['C']), new_marg1_total)
+            d['marg1_pG'] = self._catch_zerodivisionerror(float(d['G']), new_marg1_total)
+            d['marg1_pT'] = self._catch_zerodivisionerror(float(d['T']), new_marg1_total)
             ## marg1_pD should be same as above
-            d['marg2_pA'] = float(d['A'])/new_marg2_total
-            d['marg2_pC'] = float(d['C'])/new_marg2_total
-            d['marg2_pG'] = float(d['G'])/new_marg2_total
-            d['marg2_pT'] = float(d['T'])/new_marg2_total
+            d['marg2_pA'] = self._catch_zerodivisionerror(float(d['A']), new_marg2_total)
+            d['marg2_pC'] = self._catch_zerodivisionerror(float(d['C']), new_marg2_total)
+            d['marg2_pG'] = self._catch_zerodivisionerror(float(d['G']), new_marg2_total)
+            d['marg2_pT'] = self._catch_zerodivisionerror(float(d['T']), new_marg2_total)
         else:
             for e in ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']:
                 d[e] = '.'

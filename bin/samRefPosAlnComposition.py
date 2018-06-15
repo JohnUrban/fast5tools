@@ -40,13 +40,27 @@ parser.add_argument('-d', '--mindepth', default=0, type=float,
 parser.add_argument('-t', '--threshold', default=1.1, type=float,
                     help='''A probability threshold to partition positions in genome into pass/fail.
                             Use this with --stringency and optionally --above.
-                            Default is 1.1 (to give everything <= 1.0).
+                            Default: Everything is returned by using 1.1 as the value, which triggers it to return "False" for >= threshold.
                             When used without --above, it should pass/keep all positions below threshold.
                             When used with --above, it should pass/keep all above or equal to threshold. (None by default)''')
 parser.add_argument('-a', '--above', default=False, action='store_true',
                     help='''Used with --threshold (and --stringency).
                             Not specifying --above should pass/keep all positions below threshold.
                             Specfying --above should pass/keep all above or equal to threshold.''')
+parser.add_argument('-r', '--reject_undefined', default=False, action='store_true',
+                    help='''Default: False. Undefined values are reported.
+                            IMPORTANT: you should reject the undefined values in some analyses -- can do this "ex post facto" w/ awk (for/against "NA") if need be.
+                            Used with --threshold (and --stringency).
+                            Not specifying --reject_undefined should pass/keep all positions where the probability was "NA".
+                            Specfying --reject_undefined should fail/reject them.
+                            An example where the probability is undefined in the case of using stringency=1 when there are no matches or mismatches, only deletions.
+                            In such a case, marginalizing out deletions and Ns would result in 0/(0+0).
+                            NOTE: This only rejects/keeps NA values when encountered as part of the stringency level.
+                            Thus if you are using stringency=1 and get an 'NA' as described above, it will act on it.
+                            However, if stringency=2 or stringency=3 was used, that 'NA' would not be seen as part of the threshold test.
+                            Thus, some columns can still have 'NA' values even if you use this option.
+                            Again- since this can also be handled ex post facto with AWK, it might be better to let all NA values through and worry later.
+                            ''')
 
 parser.add_argument('-s', '--stringency', default=1, type=int,
                     help='''If thresholding is applied, this changes the stringency of filtering.
@@ -249,12 +263,8 @@ if not args.no_header:
 
 for rec in mpileup:
     if rec.has_min_depth(args.mindepth):
-        if rec.equal_or_above_threshold(threshold=args.threshold, stringency=args.stringency, strand=0): ## Want option of only printing imperfect positions
-            if args.above:
-                print rec
-        else:
-            if not args.above:
-                print rec
+        if rec.passes_threshold(threshold=args.threshold, stringency=args.stringency, strand=0, above=args.above, reject_undefined=args.reject_undefined): ## Want option of only printing imperfect positions
+            print rec
 mpileup.close()
 
 
