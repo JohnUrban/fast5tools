@@ -2050,7 +2050,19 @@ class MpileupRecord(object):
         self.trantab = trantab
         self.pattern = pattern
         self.seq, self.pos, self.ref, self.depth, self.composition, self.quals = rec.strip().split()
-        self.counts = self._get_composition_counts(self.composition, self.ref, self.trantab, self.pattern, self.depth)
+        if self.has_depth():
+            ## This needs to catch mpileup records that report 0 depth and show "*" "*" in the reads and quals columns
+            ## Those cause errors in _get_composition_counts - however, this is a band-aid over another problem
+            ## If there are >= 1 reads but both show deletions for a base, then the marg2_totals will be divided by 0
+            ## The answer to %mm or %m of 0mm and 0m is undefined 0/(0+0)
+            ##  -- it is not abundantly clear how to handle it at the moment b/c reporting 0% mm for marg2 might make it seem like it has no errors
+            ##  -- unless you also looked at %m which would also be 0% which would make it seem like it had nothing right (which would be more correct anyway).
+            ## -- So truly it is undefined in that sense.
+            ## With high enough coverage - one could always add pseudocounts to avoid this (like small priors)
+            ##  Maybe that is a TODO
+            ## -- I'd only add a pseudocount to the match though representing a small belief that the reference was assembled correctly
+            ## -- In that sense it is just like counting the reference that was aligned to as one of the alignments
+            self.counts = self._get_composition_counts(self.composition, self.ref, self.trantab, self.pattern, self.depth)
         
 
     def equal_or_above_threshold(self, threshold=1.0, stringency=1, strand=0):
@@ -2076,18 +2088,21 @@ class MpileupRecord(object):
         return int(self.depth) > mindepth
     
     def __str__(self):
-        probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
-        counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
-        ends = ['rI', 'bI', '^', '$' ]
-        symbols = counts + probs + ends
-        nonstranded = [self.counts[0][k] for k in symbols]
-        pos = [self.seq, self.pos, self.ref, self.depth]
-        out = pos + nonstranded
-        if self.stranded:
-            plus = [self.counts[1][k] for k in symbols[:-4]]
-            minus = plus = [self.counts[2][k] for k in symbols[:-4]]
-            out += plus
-            out += minus
+        if self.has_depth():
+            probs = ['p=', 'pX', 'pD', 'pN', 'marg1_p=', 'marg1_pX', 'marg1_pD', 'marg2_p=', 'marg2_pX', 'pA', 'pC', 'pG', 'pT', 'marg1_pA',  'marg1_pC',  'marg1_pG',  'marg1_pT', 'marg2_pA', 'marg2_pC', 'marg2_pG', 'marg2_pT']
+            counts = ['=', 'X', 'D', 'I', 'A', 'C', 'G', 'T', 'N']
+            ends = ['rI', 'bI', '^', '$' ]
+            symbols = counts + probs + ends
+            nonstranded = [self.counts[0][k] for k in symbols]
+            pos = [self.seq, self.pos, self.ref, self.depth]
+            out = pos + nonstranded
+            if self.stranded:
+                plus = [self.counts[1][k] for k in symbols[:-4]]
+                minus = plus = [self.counts[2][k] for k in symbols[:-4]]
+                out += plus
+                out += minus
+        else:
+            out = []
         return '\t'.join([str(e) for e in out])
     
     def _get_probs(self, d):
@@ -2237,10 +2252,16 @@ class Mpileup(object):
     def __iter__(self):
         return self
     def next(self):
-        try:
-            return MpileupRecord(self.mpileup.readline(), self.trantab, self.pattern, self.stranded)
-        except:
+        nextrec = self.mpileup.readline()
+##        try:
+##            return MpileupRecord(nextrec, self.trantab, self.pattern, self.stranded)
+##        except ValueError, e:
+##            raise StopIteration
+        if nextrec:
+            return MpileupRecord(nextrec, self.trantab, self.pattern, self.stranded)
+        else:
             raise StopIteration
+
     def close(self):
         if self.need_to_close_file:
             self.mpileup.close()
