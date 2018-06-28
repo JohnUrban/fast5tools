@@ -186,7 +186,7 @@ def new_line_given_counts(line1, counts, colnames):
     return newline
     
 def depth(line):
-    return sum([line['e'] for e in 'ACGTDN'])
+    return sum([line[e] for e in 'ACGTDN'])
     
 ##########################################################
 '''INPUTS'''
