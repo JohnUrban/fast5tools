@@ -128,7 +128,8 @@ def make_compheader_out(colnames=['chr', 'pos', 'log2fc', 'log10pval', 'new_log2
 
 def downsample_line1_given_line2(line1, line2, colnames):
     charlist = [e for e in ''.join([base*int(line1[base]) for base in 'ACGTND'])]
-    downsample = np.random.choice(charlist, size=int(line2['depth']), replace=False)
+    #downsample = np.random.choice(charlist, size=int(line2['depth']), replace=False)
+    downsample = np.random.choice(charlist, size=int(depth(line2)), replace=False)
     counts = Counter(downsample)
     newline1 = new_line_given_counts(line1, counts, colnames)
     return newline1
@@ -184,7 +185,8 @@ def new_line_given_counts(line1, counts, colnames):
     newline['^'], newline['$'] = get_start_and_end_info(line1, newline)
     return newline
     
-    
+def depth(line):
+    return sum([line['e'] for e in 'ACGTDN'])
     
 ##########################################################
 '''INPUTS'''
@@ -243,11 +245,13 @@ while True:
         if same_chrom(fline,gline):
             if posA_equals_posB(fline, gline):                                                                                                                                       
                 ## downsample if necessary
-                if fline['depth'] > gline['depth']:
+                #if fline['depth'] > gline['depth']:
+                if depth(fline) > depth(gline):
                     #downsample f - create modified fline
                     outfline = downsample_line1_given_line2(fline, gline, colnames)
                     outgline = gline
-                elif fline['depth'] < gline['depth']:
+                #elif fline['depth'] < gline['depth']:
+                elif depth(gline) > depth(fline):
                     #downsample g - create modified gline
                     outfline = fline
                     outgline = downsample_line1_given_line2(gline, fline, colnames)
