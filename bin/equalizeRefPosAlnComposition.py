@@ -99,7 +99,7 @@ def posA_higher_than_posB(fline, gline):
 
 def get_stats(line1,line2,smallest_p=1e-300):
     if line1['marg2_pX'] == 'NA' or line2['marg2_pX'] == 'NA':
-        return '.', '.'
+        return ['.', '.']
     log2fc = log((line1['marg2_pX']+1e-9)/(line2['marg2_pX']+1e-9))/log(2)
     ## Test if number mismatches in F are signif > num mismatches expected given prob_mismatch from G
     pval = max(binom_test(x=line1['X'], n=line1['X']+line1['='], p=line2['marg2_pX'], alternative='greater'), smallest_p)
