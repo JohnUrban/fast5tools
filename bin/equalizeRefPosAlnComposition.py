@@ -74,7 +74,13 @@ def parse_line(line, hdict, typedict):
     newdict = {}
     for idx,colname in idict.iteritems():
         #colname = idict[idx]
-        newdict[colname] = typedict[colname](line[idx])
+        try:
+            newdict[colname] = typedict[colname](line[idx])
+        except ValueError:
+            if line[idx] == 'NA':
+                newdict[colname] = str(line[idx])
+            else: ##Throw the error
+                newdict[colname] = typedict[colname](line[idx])
     return newdict
 
 def same_chrom(fline, gline):
