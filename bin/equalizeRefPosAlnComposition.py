@@ -69,7 +69,7 @@ parser.add_argument('-n', '--lowN',
 
                         This flag helps set the fixed low value for N. Default = 10.''')
 
-parser.add_argument('-n', '--highN', 
+parser.add_argument('-N', '--highN', 
                    type=int, required=False, default=100,
                    help='''See --lowN for detailed description.
                             This flag helps set the fixed high value for N. Default = 100.''')
