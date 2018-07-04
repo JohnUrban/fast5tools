@@ -326,10 +326,10 @@ while True:
         else: #chrom changed in one of the files
             whichidx = which_chrom_same_as_curr(fline, gline, currchr)
             if whichidx == 0:
-                while fline['chr'] != currchr:
+                while gline['chr'] != currchr:
                     fline = parse_line(f.next().strip().split(), idict, typedict)
             elif whichidx == 1:
-                while gline['chr'] != currchr:
+                while fline['chr'] != currchr:
                     gline = parse_line(g.next().strip().split(), idict, typedict)
         
         
