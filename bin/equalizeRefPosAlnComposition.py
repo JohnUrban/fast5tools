@@ -10,6 +10,7 @@ import numpy as np
 parser = argparse.ArgumentParser(description="""
 
 DESCRIPTION
+    Beta script -- known to contain run-forever bugs.
     
     Input = Two output files from samRefPosAlnComposition.py (with headers).
     Need to be sorted the same way.
@@ -50,6 +51,28 @@ parser.add_argument('-p', '--smallest_p',
                    type=float, required=False, default=1e-300,
                    help='''Smallest p-value allowed. Default: 1e-300. Provide float.''')
 
+parser.add_argument('-n', '--lowN', 
+                   type=int, required=False, default=10,
+                   help='''When calculating binomial p-values, it calculates 3 kinds:
+                        (i) using the actual N and k found,
+                        (ii) using a fixed low N value and correspondng k value given p(mismatch),
+                        (iii) using a fixed high N value.
+                        Using the same N at each position will help make p-values more comparable since p-values are affected by both effect size and N.
+                        Unfortunately, p-values can get smaller with increasing N given the same effect size (even if it is uninteresting!).
+                        As an aside, since effect size only gets more reliable with increasing evidence (i.e. N),
+                        an alternative approach is to only consider regions that exceed some minimum evidence required and some minimum effect size deemed interesting.
+                        Though this makes the p-values more comparable, it is not perfect.
+                        It is using scaled data rather than real data, which is problematic - particularly when scaling up.
+                        Small N in the actual data will be subject to higher random variation - and scaling it up will just make random variation look more significant.
+                        Hopefully, there is enough in each direction to off set that a bit when looking in larger windows.
+                        Scaling big N down poses less of an issue -- but will not reflect the bigger variation that would have been found at that low N.
+
+                        This flag helps set the fixed low value for N. Default = 10.''')
+
+parser.add_argument('-n', '--highN', 
+                   type=int, required=False, default=100,
+                   help='''See --lowN for detailed description.
+                            This flag helps set the fixed high value for N. Default = 100.''')
 parser.add_argument('-no', '--no-header', dest='no_header', default=False, action='store_true', help='''No header in output.''')
 args = parser.parse_args()
 
@@ -95,27 +118,46 @@ def which_chrom_same_as_curr(fline, gline, currchr):
         return 1
 
 def posA_equals_posB(fline, gline):
-    return fline['pos'] == gline['pos']
+    if same_chrom(fline, gline):
+        return fline['pos'] == gline['pos']
+    return False
 
 def posA_lower_than_posB(fline, gline):
-    return fline['pos'] < gline['pos']
+    if same_chrom(fline, gline):
+        return fline['pos'] < gline['pos']
+    return False
 
 def posA_higher_than_posB(fline, gline):
-    return fline['pos'] > gline['pos']
+    if same_chrom(fline, gline):
+        return fline['pos'] > gline['pos']
+    return False
 
-def get_stats(line1,line2,smallest_p=1e-300):
+def log10p(pval):
+    log10pval = (log(pval) / log(10))
+    return 0 if log10pval == 0 else -1*log10pval
+
+def get_stats(line1,line2,smallest_p=1e-300,highN=100, lowN=10):
     if line1['marg2_pX'] == 'NA' or line2['marg2_pX'] == 'NA':
         return ['.', '.']
     log2fc = log((line1['marg2_pX']+1e-9)/(line2['marg2_pX']+1e-9))/log(2)
     ## Test if number mismatches in F are signif > num mismatches expected given prob_mismatch from G
-    pval = max(binom_test(x=line1['X'], n=line1['X']+line1['='], p=line2['marg2_pX'], alternative='greater'), smallest_p)
-    log10pval = (log(pval) / log(10))
-    log10pval = 0 if log10pval == 0 else -1*log10pval
-    return [log2fc, log10pval]
+    n = line1['X']+line1['=']
+    x = line1['X']
+    p2 = line2['marg2_pX']
+    pval = max(binom_test(x=x, n=n, p=p2, alternative='greater'), smallest_p)
+    p1 = float(x)/float(n)
+    scaledX = int( round( p1 * highN ) )
+    highN_pval = max(binom_test(x=scaledX, n=highN, p=p2, alternative='greater'), smallest_p)
+    scaledX = int( round( p1 * lowN ) )
+    lowN_pval = max(binom_test(x=scaledX, n=lowN, p=p2, alternative='greater'), smallest_p)
+    log10pval = log10p(pval)
+    log10_highN_pval = log10p(highN_pval)
+    log10_lowN_pval = log10p(lowN_pval)
+    return [log2fc, log10pval, log10_highN_pval, log10_lowN_pval]
     
-def make_comp_line(fline, gline, newfline, newgline, smallest_p=1e-300):
+def make_comp_line(fline, gline, newfline, newgline, smallest_p=1e-300, highN=100, lowN=10):
     ## chr, pos, log2fc, log10pval, new_log2fc, new_log10pval
-    return ('\t').join([str(e) for e in [fline['chr'], fline['pos']] + get_stats(fline,gline,smallest_p) + get_stats(newfline,newgline,smallest_p)]) + '\n'
+    return ('\t').join([str(e) for e in [fline['chr'], fline['pos']] + get_stats(fline,gline,smallest_p,highN,lowN) + get_stats(newfline,newgline,smallest_p,highN,lowN)]) + '\n'
 
 def make_line_out(line, colnames):
     return '\t'.join([str(out) for out in [line[e] for e in colnames]]) + '\n'
@@ -123,7 +165,7 @@ def make_line_out(line, colnames):
 def make_header_out(colnames):
     return '\t'.join([str(i+1)+'='+colnames[i] for i in range(len(colnames))]) + '\n'
 
-def make_compheader_out(colnames=['chr', 'pos', 'log2fc', 'log10pval', 'new_log2fc', 'new_log10pval']):
+def make_compheader_out(colnames=['chr', 'pos', 'log2fc', 'log10pval', 'log10pval_fixed_high_N',  'log10pval_fixed_low_N',  'new_log2fc', 'new_log10pval', 'new_log10pval_fixed_high_N',  'new_log10pval_fixed_low_N']):
     return '\t'.join([str(i+1)+'='+colnames[i] for i in range(len(colnames))]) + '\n'
 
 def downsample_line1_given_line2(line1, line2, colnames):
@@ -264,7 +306,7 @@ while True:
                 gout.write(make_line_out(outgline, colnames))
                 if args.compare:
                     #print fline['chr'], fline['pos'], fline['ref'], fline['depth'], gline['chr'], gline['pos'], gline['ref'], gline['depth'], "SH", log2fc, log10pval
-                    compareout.write(make_comp_line(fline, gline, outfline, outgline, args.smallest_p))
+                    compareout.write(make_comp_line(fline, gline, outfline, outgline, args.smallest_p, args.highN, args.lowN))
  
                 
                 ## nextlines for f and g
