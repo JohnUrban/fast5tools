@@ -48,6 +48,18 @@ parser.add_argument('-c', '--compare', default=False, type=str, help='''If want 
 For now, this only gives log2FoldChange and -log10Pval for marg2_pX between files (using "greater" in binomial test).
 File1 is considered the test file and File2 is considered the control file. Output is gzipped.''')
 
+parser.add_argument('-M', '--maxcov', 
+                   type=int, default=False,
+                   help='''Max coverage at each site. Default: False (not used).
+                        This will output updated files where both sites are downsampled to the max allowed coverage.
+                        If --compare is used, the 'new'/updated pvalues and fold-changes will be from the doubly downsampled sites (unless 1 or both is < maxcov).
+                        This not only allows to compare the same sites between files on equal footing, it also helps
+                        to compare different sites to each other.
+                        This is similar to the high and low fixed N approach for calculating binomial p-values,
+                        but it is better at giving each site comparable variation as well as N.
+                        For example, lower coverage sites tend to have spuriously high mismatch rates more often.
+                        That would not be reflected by simply fixing N in the equation, but has a better chance of being captured by downsampling.''')
+
 parser.add_argument('-p', '--smallest_p', 
                    type=float, required=False, default=1e-300,
                    help='''Smallest p-value allowed. Default: 1e-300. Provide float.''')
@@ -90,7 +102,7 @@ def newname(fh):
     return d + 'updated_' + b
 
 def next_line(fh):
-    return parse_line(f.next().strip().split(), idict, typedict)
+    return parse_line(fh.next().strip().split(), idict, typedict)
 
 def parse_line(line, hdict, typedict):
     ''' input line is typically f.next().strip().split()
@@ -109,30 +121,30 @@ def parse_line(line, hdict, typedict):
                 newdict[colname] = typedict[colname](line[idx])
     return newdict
 
-def same_chrom(fline, gline):
-    return fline['chr'] == gline['chr']
+def same_chrom(line1, line2):
+    return line1['chr'] == line2['chr']
 
-def which_chrom_same_as_curr(fline, gline, currchr):
+def which_chrom_same_as_curr(line1, line2, currchr):
     ## Assumption is that only one changed -- if both did, we wouldn't be in this mess.
-    assert fline['chr'] == currchr or gline['chr'] == currchr
-    if fline['chr'] == currchr:
+    assert line1['chr'] == currchr or line2['chr'] == currchr
+    if line1['chr'] == currchr:
         return 0
     else:
         return 1
 
-def posA_equals_posB(fline, gline):
-    if same_chrom(fline, gline):
-        return fline['pos'] == gline['pos']
+def posA_equals_posB(line1, line2):
+    if same_chrom(line1, line2):
+        return line1['pos'] == line2['pos']
     return False
 
-def posA_lower_than_posB(fline, gline):
-    if same_chrom(fline, gline):
-        return fline['pos'] < gline['pos']
+def posA_lower_than_posB(line1, line2):
+    if same_chrom(line1, line2):
+        return line1['pos'] < line2['pos']
     return False
 
-def posA_higher_than_posB(fline, gline):
-    if same_chrom(fline, gline):
-        return fline['pos'] > gline['pos']
+def posA_higher_than_posB(line1, line2):
+    if same_chrom(line1, line2):
+        return line1['pos'] > line2['pos']
     return False
 
 def log10p(pval):
@@ -175,6 +187,14 @@ def downsample_line1_given_line2(line1, line2, colnames):
     charlist = [e for e in ''.join([base*int(line1[base]) for base in 'ACGTND'])]
     #downsample = np.random.choice(charlist, size=int(line2['depth']), replace=False)
     downsample = np.random.choice(charlist, size=int(depth(line2)), replace=False)
+    counts = Counter(downsample)
+    newline1 = new_line_given_counts(line1, counts, colnames)
+    return newline1
+
+def downsample_line_given_maxcov(line1, maxcov, colnames):
+    charlist = [e for e in ''.join([base*int(line1[base]) for base in 'ACGTND'])]
+    #downsample = np.random.choice(charlist, size=int(line2['depth']), replace=False)
+    downsample = np.random.choice(charlist, size=maxcov, replace=False)
     counts = Counter(downsample)
     newline1 = new_line_given_counts(line1, counts, colnames)
     return newline1
@@ -236,15 +256,44 @@ def depth(line):
 
 def fopen(fh):
     if fh.endswith('.gz'):
-        return gzip.open(args.file1, 'rb')
+        return gzip.open(fh, 'rb')
     else:
-        return open(args.file1)
-    
+        return open(fh)
+
+
+def downsample_if_necessary(fline, gline, colnames, maxcov=False):
+    if maxcov:
+        return downsample_to_maxcov(fline, gline, maxcov, colnames)
+    else:
+        return downsample_to_smaller(fline, gline, colnames)
+
+def downsample_to_smaller(fline, gline, colnames):
+    if depth(fline) > depth(gline):
+        #downsample f - create modified fline
+        outfline = downsample_line1_given_line2(fline, gline, colnames)
+        outgline = gline
+    #elif fline['depth'] < gline['depth']:
+    elif depth(gline) > depth(fline):
+        #downsample g - create modified gline
+        outfline = fline
+        outgline = downsample_line1_given_line2(gline, fline, colnames)
+    else:
+        outfline = fline
+        outgline = gline
+    return outfline, outgline
+
+def downsample_to_maxcov(fline, gline, maxcov, colnames):
+    outfline = downsample_line_given_maxcov(fline, maxcov, colnames) if depth(fline) > maxcov else fline
+    outgline = downsample_line_given_maxcov(gline, maxcov, colnames) if depth(gline) > maxcov else gline
+    ## If either was below maxcov, then downsample larger to smaller
+    return downsample_to_smaller(outfline, outgline, colnames)
+
 ##########################################################
 '''INPUTS'''
 ##########################################################
 f = fopen(args.file1)
 g = fopen(args.file2)
+
 fheader = f.next()
 gheader = g.next()
 assert fheader == gheader
@@ -289,8 +338,10 @@ if args.compare:
 ## INITIALIZE - Ensure they start out on the same chromosome -- else would need to make assumption on sort order to figure out which file to burn lines from.
 fline = parse_line(f.next().strip().split(), idict, typedict)
 gline = parse_line(g.next().strip().split(), idict, typedict)
+
 i=0
 while True:
+    #print "fg", fline==gline
     try:
         i+=1
         if i == 1:
@@ -299,20 +350,8 @@ while True:
         if same_chrom(fline,gline):
             if posA_equals_posB(fline, gline):                                                                                                                                       
                 ## downsample if necessary
-                #if fline['depth'] > gline['depth']:
-                if depth(fline) > depth(gline):
-                    #downsample f - create modified fline
-                    outfline = downsample_line1_given_line2(fline, gline, colnames)
-                    outgline = gline
-                #elif fline['depth'] < gline['depth']:
-                elif depth(gline) > depth(fline):
-                    #downsample g - create modified gline
-                    outfline = fline
-                    outgline = downsample_line1_given_line2(gline, fline, colnames)
-                else:
-                    outfline = fline
-                    outgline = gline
-                
+                outfline, outgline = downsample_if_necessary(fline, gline, colnames, args.maxcov)
+
                 ## write out
                 fout.write(make_line_out(outfline, colnames))
                 gout.write(make_line_out(outgline, colnames))
