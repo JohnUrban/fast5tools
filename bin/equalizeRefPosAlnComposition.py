@@ -1,5 +1,5 @@
 #!/usr/bin/env python2.7
-import argparse, sys, os,re
+import argparse, sys, os, re, gzip
 from collections import Counter, defaultdict
 from scipy.stats import binom_test
 from math import log
@@ -29,7 +29,8 @@ DESCRIPTION
             - A table file with combined scores -- e.g. -log10(p-vals), -log2(fold changes)
             - Where there is data in both, a -log10(binomial p-val) is also calculated given a pro 
 
-
+    All output is gzipped and end with ".gz".
+    
     Does not return stranded analysis.
         - Can hack it by giving RefPosAlnComp output of just the stranded info (for + or -) w/ colnames of nonstranded info.
         
@@ -39,13 +40,13 @@ DESCRIPTION
 
 parser.add_argument('-f1', '--file1', 
                    type= str, required=True,
-                   help='''Path to samRefPosAlnComposition file 1.''')
+                   help='''Path to samRefPosAlnComposition file 1. Automatically detects .gz for gzipped filed.''')
 parser.add_argument('-f2', '--file2', 
                    type= str, required=True,
-                   help='''Path to samRefPosAlnComposition file 1.''')
+                   help='''Path to samRefPosAlnComposition file 1. Automatically detects .gz for gzipped filed.''')
 parser.add_argument('-c', '--compare', default=False, type=str, help='''If want comparison file, use this flag and provide file name to store in: --compare filename.ext.
 For now, this only gives log2FoldChange and -log10Pval for marg2_pX between files (using "greater" in binomial test).
-File1 is considered the test file and File2 is considered the control file.''')
+File1 is considered the test file and File2 is considered the control file. Output is gzipped.''')
 
 parser.add_argument('-p', '--smallest_p', 
                    type=float, required=False, default=1e-300,
@@ -229,12 +230,19 @@ def new_line_given_counts(line1, counts, colnames):
     
 def depth(line):
     return sum([line[e] for e in 'ACGTDN'])
+
+
+def fopen(fh):
+    if fh.endswith('.gz'):
+        return gzip.open(args.file1, 'rb')
+    else:
+        return open(args.file1)
     
 ##########################################################
 '''INPUTS'''
 ##########################################################
-f = open(args.file1)
-g = open(args.file2)
+f = fopen(args.file1)
+g = fopen(args.file2)
 fheader = f.next()
 gheader = g.next()
 assert fheader == gheader
@@ -242,10 +250,10 @@ assert fheader == gheader
 ##########################################################
 '''OUTPUTS'''
 ##########################################################
-fout = open(newname(args.file1), 'w')
-gout = open(newname(args.file2), 'w')
+fout = gzip.open(newname(args.file1), 'wb')
+gout = gzip.open(newname(args.file2), 'wb')
 if args.compare:
-    compareout = open(args.compare, 'w')
+    compareout = gzip.open(args.compare, 'wb')
 
 ##########################################################
 '''PARSE HEADER'''
