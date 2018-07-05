@@ -44,6 +44,14 @@ parser.add_argument('-f1', '--file1',
 parser.add_argument('-f2', '--file2', 
                    type= str, required=True,
                    help='''Path to samRefPosAlnComposition file 1. Automatically detects .gz for gzipped filed.''')
+
+parser.add_argument('-P', '--prefix', 
+                   type=str, default="updated_",
+                   help='''The output is named "updated_original_filename.ext" by default.
+                    i.e. the prefixed "updated_" is added.
+                    This flag allows you to change the prefix.
+                    e.g. --prefix updated_trialN_ would help not overwrite the previous file with the default updated_ prefix.''')
+
 parser.add_argument('-c', '--compare', default=False, type=str, help='''If want comparison file, use this flag and provide file name to store in: --compare filename.ext.
 For now, this only gives log2FoldChange and -log10Pval for marg2_pX between files (using "greater" in binomial test).
 File1 is considered the test file and File2 is considered the control file. Output is gzipped.''')
@@ -92,14 +100,14 @@ args = parser.parse_args()
 ##########################################################
 '''FUNCTIONS'''
 ##########################################################
-def newname(fh):
+def newname(fh, prefix="updated_"):
     b=os.path.basename(fh)
     d=os.path.dirname(fh)
     if d and not d.endswith('/'):
         d+='/'
     if not b.endswith('.gz'): # For now all output is gzipped
         b += '.gz'
-    return d + 'updated_' + b
+    return d + prefix + b
 
 def next_line(fh):
     return parse_line(fh.next().strip().split(), idict, typedict)
@@ -301,8 +309,8 @@ assert fheader == gheader
 ##########################################################
 '''OUTPUTS'''
 ##########################################################
-fout = gzip.open(newname(args.file1), 'wb')
-gout = gzip.open(newname(args.file2), 'wb')
+fout = gzip.open(newname(args.file1, args.prefix), 'wb')
+gout = gzip.open(newname(args.file2, args.prefix), 'wb')
 if args.compare:
     if not args.compare.endswith('.gz'):
         args.compare += '.gz'
