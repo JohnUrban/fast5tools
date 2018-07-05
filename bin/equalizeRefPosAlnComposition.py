@@ -85,6 +85,8 @@ def newname(fh):
     d=os.path.dirname(fh)
     if d and not d.endswith('/'):
         d+='/'
+    if not b.endswith('.gz'): # For now all output is gzipped
+        b += '.gz'
     return d + 'updated_' + b
 
 def next_line(fh):
@@ -253,6 +255,8 @@ assert fheader == gheader
 fout = gzip.open(newname(args.file1), 'wb')
 gout = gzip.open(newname(args.file2), 'wb')
 if args.compare:
+    if not args.compare.endswith('.gz'):
+        args.compare += '.gz'
     compareout = gzip.open(args.compare, 'wb')
 
 ##########################################################
