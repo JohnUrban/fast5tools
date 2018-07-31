@@ -1403,7 +1403,7 @@ class SplitReadSamRecord(object):
         try:
             ans = df.sort('pos')['pos'] == df.sort('clip')['pos']
         except: ## .sort deprecated
-            ans = df.sort_values('pos')['pos'] == df.sort('clip')['pos']
+            ans = df.sort_values('pos')['pos'] == df.sort_values('clip')['pos']
         return sum(ans) == len(indexes)
 
 
