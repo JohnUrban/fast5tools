@@ -1399,7 +1399,11 @@ class SplitReadSamRecord(object):
             d['pos'].append( self.get_record(i).get_pos_field() )
             d['clip'].append( self.get_record(i).get_5prime_clip_len() )
         df = pandas.DataFrame(d)
-        ans = df.sort('pos')['pos'] == df.sort('clip')['pos']
+        
+        try:
+            ans = df.sort('pos')['pos'] == df.sort('clip')['pos']
+        except: ## .sort deprecated
+            ans = df.sort_values('pos')['pos'] == df.sort('clip')['pos']
         return sum(ans) == len(indexes)
 
 
