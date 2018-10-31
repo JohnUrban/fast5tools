@@ -39,7 +39,13 @@ John Urban (2015)
 19 = fast5 filename (path as given)
 20 = fast5 filename (absolute path)
 
-John Urban (2015, 2016)
+
+Note:
+This was initially written in the early days of the MinION.
+Then, hairpin adapters were used to give template strand, complement strand, and 2D reads.
+Now only the 1D template strands are common.
+
+John Urban (2015, 2016,2017, 2018)
 
     """, formatter_class = argparse.RawTextHelpFormatter)
 
@@ -53,9 +59,16 @@ If inside dir of dirs with .fast5 files, then can just do "*" to get all files f
 parser.add_argument('-c', '--custom', type=str, 
                     help='''Provide comma-separated list of integers corresponding to what information to return''')
 parser.add_argument('-a', '--all', action="store_true", default=False,
-                    help='''Return all information.''')
+                    help='''Return all information. For files where complement and 2D information are relevant. Otherwise, see --template.''')
 parser.add_argument('-s', '--standard', action="store_true", default=False,
-                    help='''Return all information from options 1-17.''')
+                    help='''Return all information from options 1-17. For files where complement and 2D information are relevant. Otherwise, see --template''')
+
+parser.add_argument('-t', '--template', action="store_true", default=False,
+                    help='''Returns template-relevant information only: 1,7,10,13,15.
+To also get path information, just use "--template --custom 19" or "--template --custom 20".
+This would be the same as doing: "--custom 1,7,10,13,15,19" or "--custom 1,7,10,13,15,20"''')
+
+
 
 parser.add_argument('-d', '--delimiter', type=str, default='\t',
                     help='''Provide choice of delimiter. Default: tab.
@@ -107,6 +120,8 @@ if args.standard:
     f5cmds = f5cmds.union(range(1,18))
 if args.all:
     f5cmds = f5cmds.union(range(1,num_f5cmds+1))
+if args.template:
+    f5cmds = f5cmds.union([1,7,10,13,15])
 
 if args.delimiter == "newline":
     args.delimiter = "\n"
