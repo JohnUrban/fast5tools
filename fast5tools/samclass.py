@@ -1266,7 +1266,7 @@ class SplitReadSamRecord(object):
                     maxalnscore = AS
                 elif AS > secondplace:
                     secondplace = AS
-            if secondplace is not float('-inf'):
+            if secondplace not in (float('-inf'), 0):
                 return float(maxalnscore)/secondplace
             else:
                 return float('inf')
@@ -1399,11 +1399,21 @@ class SplitReadSamRecord(object):
             d['pos'].append( self.get_record(i).get_pos_field() )
             d['clip'].append( self.get_record(i).get_5prime_clip_len() )
         df = pandas.DataFrame(d)
-        
+
+##        print df.sort_values('pos')['pos']
+##        print
+##        print df.sort_values('clip')['pos']
+##        print
+        def getans(x,y):
+            try:
+                return x == y
+            except:
+                return [0]
         try:
-            ans = df.sort('pos')['pos'] == df.sort('clip')['pos']
+            df.sort('pos')['pos']
+            ans = getans(df.sort('pos')['pos'], df.sort('clip')['pos'])
         except: ## .sort deprecated
-            ans = df.sort_values('pos')['pos'] == df.sort_values('clip')['pos']
+            ans = getans(df.sort_values('pos')['pos'], df.sort_values('clip')['pos'])
         return sum(ans) == len(indexes)
 
 
@@ -1561,7 +1571,8 @@ class SplitReadSamRecord(object):
                 split_alignment_highest_AS = self.determine_highest_alignment_score()[0]
                 split_alignment_top2_AS_ratio = self.determine_highest_alignment_score_ratio()
                 longest_aln = split_aln_lengths[chosen_alignment_index]
-                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
+                LtoH_ASR = 1.0 if AS == float(split_alignment_highest_AS) else (float('inf') if split_alignment_highest_AS == 0 else AS/float(split_alignment_highest_AS))
+                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( LtoH_ASR ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
                 chosen_alignment = genomic_windows[chosen_alignment_index]
                 
                 #get merge information
@@ -1626,7 +1637,8 @@ class SplitReadSamRecord(object):
                 split_alignment_highest_AS = self.determine_highest_alignment_score()[0]
                 split_alignment_top2_AS_ratio = self.determine_highest_alignment_score_ratio()
                 longest_aln = split_aln_lengths[chosen_alignment_index]
-                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( AS/float(split_alignment_highest_AS) ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
+                LtoH_ASR = 1.0 if AS == float(split_alignment_highest_AS) else (float('inf') if split_alignment_highest_AS == 0 else AS/float(split_alignment_highest_AS)) #AS/float(split_alignment_highest_AS)
+                split_alignment_label = 'numaln:' + str(self.get_num_aln()) + "|longest_aln_len:" + str(longest_aln) + "|longest_aln_proportion:" + str(split_alignment_proportions[chosen_alignment_index]) + "|Top2AlnLengthRatio:" + str(split_alignment_top2_ratio) + "|AS:" + str(AS) + "|LongestAStoHighestASratio:" + str( LtoH_ASR ) + "|top2ASratio:" + str(split_alignment_top2_AS_ratio)
                 chosen_alignment = genomic_windows[chosen_alignment_index]
                 if num_after_merge == self.get_num_aln():
 ##                    print 4,1

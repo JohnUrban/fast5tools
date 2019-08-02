@@ -87,12 +87,17 @@ parser.add_argument('--getBCinfo', '-BC', action='store_true', default=False,
 This is from creating fasta/fastq from output of fast5_sw_bardecoder.py specified with --sequence/--quals,
 and merging all desired barcode info into string following BC:Z:''')
 
+
+parser.add_argument('--do_not_adjust_window_for_clipping', '-noadjust', action='store_true', default=False,
+                    help=''' By default, the genomic window is pushed out at least as far as it would need to be to include soft/hard clipped regions at 5'/3' ends. This turns it off.''')
+
+
 args = parser.parse_args()
 
 
 
 
-get_genomic_windows(samfilepath=args.sam, flank=args.flank, merge_dist=args.merge_dist, majority=args.majority, require_order=args.require_order, require_strand=args.require_strand, reference=args.reference, getF5field=args.getF5info, getBCfield=args.getBCinfo)
+get_genomic_windows(samfilepath=args.sam, flank=args.flank, merge_dist=args.merge_dist, majority=args.majority, require_order=args.require_order, require_strand=args.require_strand, reference=args.reference, getF5field=args.getF5info, getBCfield=args.getBCinfo, adjust_for_clipping_in_output=(not args.do_not_adjust_window_for_clipping))
 
 
 
