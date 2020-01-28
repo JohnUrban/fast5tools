@@ -9,3 +9,4 @@ build/*
 dist/*
 stats.del*
 bin/old
+bin/dev
