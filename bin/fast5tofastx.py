@@ -279,7 +279,6 @@ if __name__ == "__main__":
     samflag=""
     if args.samflag:
         samflag = "F5:Z:"
-
     falcon_i = 0
     for f5 in Fast5List(args.fast5, keep_tar_footprint_small=(not args.notarlite)):
         if f5.is_not_corrupt() and f5.is_nonempty:

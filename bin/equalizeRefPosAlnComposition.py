@@ -156,8 +156,8 @@ def posA_higher_than_posB(line1, line2):
     return False
 
 def log10p(pval):
-    log10pval = (log(pval) / log(10))
-    return 0 if log10pval == 0 else -1*log10pval
+    log10pvalue = (log(pval) / log(10))
+    return 0 if log10pvalue == 0 else -1*log10pvalue
 
 def get_stats(line1,line2,smallest_p=1e-300,highN=100, lowN=10):
     if line1['marg2_pX'] == 'NA' or line2['marg2_pX'] == 'NA':

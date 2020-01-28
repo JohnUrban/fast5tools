@@ -1467,7 +1467,7 @@ class SplitReadSamRecord(object):
         return (chrom, start, end)
 
     def get_merge_with_max_spanning_alignment(self, idx, require_order=False, require_strand=False, return_max_span_aln_tuple=False):
-        ''' idx = doctionary output of get_index_from_merged_tuples().
+        ''' idx = dictionary output of get_index_from_merged_tuples().
             require_order = when True, output from alignments_ordered_like_read() must be True to be considered a valid merge.
             require_strand = when True, output from alignments_on_same_strand() must be True to be considered a valid merge.
             Only 'valid merges' are considered for max spanning alignment:

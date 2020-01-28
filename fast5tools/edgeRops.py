@@ -25,8 +25,7 @@ except:
                         biocLite("edgeR")
                 - the rpy2 package from terminal/cmdline: pip install rpy2
                     - Install all necessary R stuff before rpy2, which may complain about R/library versions.
-            Then try again.\n\n
-        ''')
+            Then try again.\n\n''')
 
 
 
@@ -34,49 +33,50 @@ except:
 
 ## FUNCTIONS - some/many of these are no longer needed per se (the EdgeR class is the new approach)
 
-def load_edgeR():
-    ## Load EdgeR Library
-    robjects.r('''
-        library(edgeR, quietly = TRUE)
-    ''')
+if has_R:
+    def load_edgeR():
+        ## Load EdgeR Library
+        robjects.r('''
+            library(edgeR, quietly = TRUE)
+        ''')
 
-def make_edgeR_function():
-    ## Make EdgeR Function, "f"
-    robjects.r('''
-            f <- function(data, groups, genes, bcv){
-            y <- DGEList(counts=data, group=groups, genes=as.matrix(genes, ncol=1))
-            y <- calcNormFactors(y)
-            y <- calcNormFactors(y)
-            et <- exactTest(y, dispersion=bcv^2)
-            return(et)
-            }
-            ''')
+    def make_edgeR_function():
+        ## Make EdgeR Function, "f"
+        robjects.r('''
+                f <- function(data, groups, genes, bcv){
+                y <- DGEList(counts=data, group=groups, genes=as.matrix(genes, ncol=1))
+                y <- calcNormFactors(y)
+                y <- calcNormFactors(y)
+                et <- exactTest(y, dispersion=bcv^2)
+                return(et)
+                }
+                ''')
 
-    ## Return EdgeR Function:
-    return robjects.globalenv['f']
+        ## Return EdgeR Function:
+        return robjects.globalenv['f']
 
-def get_edgeR_function():
-    load_edgeR()
-    return make_edgeR_function()
-
-
-_get_DGE_list_ = get_edgeR_function()
+    def get_edgeR_function():
+        load_edgeR()
+        return make_edgeR_function()
 
 
-def get_DGE_list(data, groups, genes, bcv):
-    return _get_DGE_list_(data, groups, genes, bcv)
+    _get_DGE_list_ = get_edgeR_function()
+
+
+    def get_DGE_list(data, groups, genes, bcv):
+        return _get_DGE_list_(data, groups, genes, bcv)
 
 ## New approach
-def get_edgeR_functions():
-    load_edgeR()
-    return robjects.r['DGEList'], robjects.r['calcNormFactors'], robjects.r['exactTest']
+    def get_edgeR_functions():
+        load_edgeR()
+        return robjects.r['DGEList'], robjects.r['calcNormFactors'], robjects.r['exactTest']
 
-_DGEList, _calcNormFactors, _exactTest = get_edgeR_functions()
+    _DGEList, _calcNormFactors, _exactTest = get_edgeR_functions()
 
-def DGEList(counts, group, genes):
-    '''counts is "data" in EdgeR class'''
-    # This worked y = _DGEList(counts=np.array([[1,2],[1,3],[1,4],[1,5]]), group=np.array([1,2]), genes=np.array(['a','b','c','d']))
-    return _DGEList(counts=counts, group=group, genes=genes)#
+    def DGEList(counts, group, genes):
+        '''counts is "data" in EdgeR class'''
+        # This worked y = _DGEList(counts=np.array([[1,2],[1,3],[1,4],[1,5]]), group=np.array([1,2]), genes=np.array(['a','b','c','d']))
+        return _DGEList(counts=counts, group=group, genes=genes)#
 
 def calcNormFactors(dgelist):
     return _calcNormFactors(dgelist)
@@ -173,161 +173,162 @@ def run_kmer_diff(parser, args):
 
 
 #### CLASSES
-class EdgeR(object):
-    def __init__(self, testdict, refdict, bcv=None):
-        ''' testdict,refdict are both default_dictionaries_int with kmer/gene keys and counts as values.'''
-        ## read in and equilibrate the 2 kmer count tables
-        #self.testdict = testdict
-        #self.refdict = refdict
-        rpy2.robjects.numpy2ri.activate() ## This needs to be deactivated before the iter_rows() thing
-        self.bcv = bcv
-        self.conditions = ['condition1', 'condition2']
-        self.groups = np.array([1,2])
-        #self.test_size = sum(testdict.values())
-        #self.ref_size = sum(refdict.values())
-        self.sizes = np.array([sum(refdict.values()), sum(testdict.values())])
-        self.counts = {'condition1':refdict, 'condition2':testdict}
-        self.all_genes = sorted(list(set(testdict.keys() + refdict.keys())))
-        self._define_data()
-        self._ensureEqualKmerSets()
-        self._debug_bcv=0.2
-        #self.dgelist = get_DGE_list(self.data, self.groups, self.final_genes, self._debug_bcv)
-        #self.tag_table = get_tag_table(self.dgelist, self.n_genes)
-        self.dgelist = DGEList(self.data, self.groups, np.array(self.final_genes))
-        self.dgelist = calcNormFactors(self.dgelist)
-        self._determine_bcv(bcv)
-        self.exactTest_results = exactTest(self.dgelist, dispersion=self.bcvsq)
-        self.tag_table = get_tag_table(self.exactTest_results, self.n_genes)
-        self.table_string = ''
-        self.results = defaultdict(list)
-        self._process_results()
-        self.medianNorm = None
+if has_R:
+    class EdgeR(object):
+        def __init__(self, testdict, refdict, bcv=None):
+            ''' testdict,refdict are both default_dictionaries_int with kmer/gene keys and counts as values.'''
+            ## read in and equilibrate the 2 kmer count tables
+            #self.testdict = testdict
+            #self.refdict = refdict
+            rpy2.robjects.numpy2ri.activate() ## This needs to be deactivated before the iter_rows() thing
+            self.bcv = bcv
+            self.conditions = ['condition1', 'condition2']
+            self.groups = np.array([1,2])
+            #self.test_size = sum(testdict.values())
+            #self.ref_size = sum(refdict.values())
+            self.sizes = np.array([sum(refdict.values()), sum(testdict.values())])
+            self.counts = {'condition1':refdict, 'condition2':testdict}
+            self.all_genes = sorted(list(set(testdict.keys() + refdict.keys())))
+            self._define_data()
+            self._ensureEqualKmerSets()
+            self._debug_bcv=0.2
+            #self.dgelist = get_DGE_list(self.data, self.groups, self.final_genes, self._debug_bcv)
+            #self.tag_table = get_tag_table(self.dgelist, self.n_genes)
+            self.dgelist = DGEList(self.data, self.groups, np.array(self.final_genes))
+            self.dgelist = calcNormFactors(self.dgelist)
+            self._determine_bcv(bcv)
+            self.exactTest_results = exactTest(self.dgelist, dispersion=self.bcvsq)
+            self.tag_table = get_tag_table(self.exactTest_results, self.n_genes)
+            self.table_string = ''
+            self.results = defaultdict(list)
+            self._process_results()
+            self.medianNorm = None
 
-    def _define_data(self):
-        self.data = []
-        self.final_genes = []
-        for gene in self.all_genes:
-            curr_row =  [int(self.counts[condition][gene]) for condition in self.conditions]
-            if sum(curr_row) > 0:
-                self.data.append(curr_row)
-                self.final_genes.append(gene)
-        self.data = np.array(self.data)
-        self.n_genes = len(self.final_genes)
+        def _define_data(self):
+            self.data = []
+            self.final_genes = []
+            for gene in self.all_genes:
+                curr_row =  [int(self.counts[condition][gene]) for condition in self.conditions]
+                if sum(curr_row) > 0:
+                    self.data.append(curr_row)
+                    self.final_genes.append(gene)
+            self.data = np.array(self.data)
+            self.n_genes = len(self.final_genes)
 
-    def _ensureEqualKmerSets(self):
-        for key in self.final_genes:
-            self.counts['condition1'][key]
-            self.counts['condition2'][key]
+        def _ensureEqualKmerSets(self):
+            for key in self.final_genes:
+                self.counts['condition1'][key]
+                self.counts['condition2'][key]
 
-    def _determine_bcv(self, bcv=None):
-        if bcv is not None:
-            self.bcvsq = bcv**2
-        ## Else, get median sd from 
-        else:
-            #self.bcvsq = "auto"
-            self.bcvsq = 0.2**2
-            ## Could be set to a default value - e.g. 0.2
-            ## Could be set to a diff value for each - e.g. a poisson-ish std given ref count, or std between conditions
-            ## Could be set to other strings: "common", "trended", "tagwise"
-            
-    def _process_results(self):
-        self.table_string = ''
-        rpy2.robjects.numpy2ri.deactivate()
-        for e in self.tag_table.iter_row():
-            out = ("\t").join(str(e).split("\n")[1].split())
-            ## Add to table_string
-            self.table_string += out + '\n'
+        def _determine_bcv(self, bcv=None):
+            if bcv is not None:
+                self.bcvsq = bcv**2
+            ## Else, get median sd from 
+            else:
+                #self.bcvsq = "auto"
+                self.bcvsq = 0.2**2
+                ## Could be set to a default value - e.g. 0.2
+                ## Could be set to a diff value for each - e.g. a poisson-ish std given ref count, or std between conditions
+                ## Could be set to other strings: "common", "trended", "tagwise"
+                
+        def _process_results(self):
+            self.table_string = ''
+            rpy2.robjects.numpy2ri.deactivate()
+            for e in self.tag_table.iter_row():
+                out = ("\t").join(str(e).split("\n")[1].split())
+                ## Add to table_string
+                self.table_string += out + '\n'
 
-            ## Add elements to this class
-            x = out.split("\t")
-            self.results['k'].append(x[1])
-            self.results['logfc'].append(float(x[2]))
-            self.results['logcpm'].append(float(x[3]))
-            self.results['p'].append(float(x[4]))
-            self.results['fdr'].append(float(x[5]))
-        rpy2.robjects.numpy2ri.activate()
+                ## Add elements to this class
+                x = out.split("\t")
+                self.results['k'].append(x[1])
+                self.results['logfc'].append(float(x[2]))
+                self.results['logcpm'].append(float(x[3]))
+                self.results['p'].append(float(x[4]))
+                self.results['fdr'].append(float(x[5]))
+            rpy2.robjects.numpy2ri.activate()
 
-    def get_countsdict(self):
-        return self.counts
+        def get_countsdict(self):
+            return self.counts
 
-    def get_testdict(self):
-        return self.counts['condition2']
+        def get_testdict(self):
+            return self.counts['condition2']
 
-    def get_refdict(self):
-        return self.counts['condition1']
+        def get_refdict(self):
+            return self.counts['condition1']
 
-    def get_conditions(self):
-        return self.conditions
+        def get_conditions(self):
+            return self.conditions
 
-    def get_groups(self):
-        return self.goups
+        def get_groups(self):
+            return self.goups
 
-    def get_sizes(self):
-        return self.get_sizes
-    
-    def get_data(self):
-        return self.data
-
-    def get_genes(self):
-        assert self.final_genes == self.all_genes ## rm this line
-        return self.final_genes
-
-    def get_dge_list(self):
-        return self.dgelist
-
-    def get_norm_factors(self, condition=None):
-        if condition is None:
-            return self.dgelist[1][2]
-        else:
-            assert condition in [0,1]
-            return self.dgelist[1][2][condition]
-
-    def get_condition_sizes_from_dgelist(self):
-        return self.dgelist[1][1]
-
-    def get_dgelist_counts(self):
-        return self.dgelist[0]
-
-    def get_dge_list_genes(self):
-        return self.dgelist[2][0]
-
-    def get_normalized_counts(self):
-        return self.get_dgelist_counts() * self.get_norm_factors()
-
-    def get_average_normalized_counts_across_conditions(self):
-        return self.get_normalized_counts().mean(1)
-    
-    def get_stdev_of_normalized_counts_across_conditions(self):
-        return self.get_normalized_counts().std(1, ddof=1)
-    
-    def get_tag_table(self):
-        return self.tag_table
-    
-    def get_table_string(self):
-        return self.table_string
-
-    def get_k_(self): #genes/names
-        return list(self.exactTest_results[2][0])
-    
-    def get_k(self): #genes/names
-        return self.results['k']
-        #return list(self.exactTest_results[2][0])
-
-    def get_logfc(self):
-        return self.results['logfc']
-
-    def get_logcpm(self):
-        return self.results['logcpm']
-
-    def get_pvalues(self):
-        return self.results['p']
-
-    def get_fdr(self):
-        return self.results['fdr']
+        def get_sizes(self):
+            return self.get_sizes
         
-    def __str__(self):
-        return self.get_table_string()
-    
+        def get_data(self):
+            return self.data
+
+        def get_genes(self):
+            assert self.final_genes == self.all_genes ## rm this line
+            return self.final_genes
+
+        def get_dge_list(self):
+            return self.dgelist
+
+        def get_norm_factors(self, condition=None):
+            if condition is None:
+                return self.dgelist[1][2]
+            else:
+                assert condition in [0,1]
+                return self.dgelist[1][2][condition]
+
+        def get_condition_sizes_from_dgelist(self):
+            return self.dgelist[1][1]
+
+        def get_dgelist_counts(self):
+            return self.dgelist[0]
+
+        def get_dge_list_genes(self):
+            return self.dgelist[2][0]
+
+        def get_normalized_counts(self):
+            return self.get_dgelist_counts() * self.get_norm_factors()
+
+        def get_average_normalized_counts_across_conditions(self):
+            return self.get_normalized_counts().mean(1)
+        
+        def get_stdev_of_normalized_counts_across_conditions(self):
+            return self.get_normalized_counts().std(1, ddof=1)
+        
+        def get_tag_table(self):
+            return self.tag_table
+        
+        def get_table_string(self):
+            return self.table_string
+
+        def get_k_(self): #genes/names
+            return list(self.exactTest_results[2][0])
+        
+        def get_k(self): #genes/names
+            return self.results['k']
+            #return list(self.exactTest_results[2][0])
+
+        def get_logfc(self):
+            return self.results['logfc']
+
+        def get_logcpm(self):
+            return self.results['logcpm']
+
+        def get_pvalues(self):
+            return self.results['p']
+
+        def get_fdr(self):
+            return self.results['fdr']
+            
+        def __str__(self):
+            return self.get_table_string()
+        
 
 
 

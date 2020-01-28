@@ -548,6 +548,10 @@ class BarcodeChoice(object):
 
     def _get_all_formatted_pairwise_alignments(self, blocksize=100, e_s=0.051, e_i=0.049, e_d=0.078):
         outstring = ''
+        try:
+            self.lowestevaluebar
+        except:
+            self._get_expected_values()
         for barcode in self.barcodes.keys():
             outstring += self._get_formatted_pairwise_alignment(barcode, blocksize, e_s, e_i, e_d)
         outstring += "Highest Marginalized Score Probability: " + self.maxscoringbarcode + ' ' + str(self.score_probabilities[self.maxscoringbarcode]) + "\n\n"
