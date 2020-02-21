@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 ## JOHN URBAN (2015,2016)
 
 import h5py, os, sys

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 import h5py, os, sys
 from fast5class.f5class import *
