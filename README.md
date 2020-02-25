@@ -76,19 +76,31 @@ Other:
 
 
 
+Please cite fast5tools as:
+Urban JM, Foulk MS, Bliss JE, Coleman CM, Lu N, Mazloom R, Brown SJ, Spradling AC, Gerbi SA. 2020. 
+
+Single-molecule sequencing of long DNA molecules allows high contiguity de novo genome assembly for the fungus fly, Sciara coprophila. 
+
+bioRxiv 2020.02.24.963009.
+
+https://www.biorxiv.org/content/10.1101/2020.02.24.963009v1
+
+This paper contains the first description of Fast5Tools.
 
 
-Please cite fast5tools and/or poreminion as:
+
+Please cite  poreminion as:
 -------------------------------------------
 Urban, J. M., Bliss, J., Lawrence, C. E. & Gerbi, S. A. 
 
-Sequencing ultra-long DNA molecules with the Oxford Nanopore MinION. 
+Sequencing ultra-long DNA molecules with the Oxford Nanopore MinION. 2015.
 
 bioRxiv (Cold Spring Harbor Labs Journals, 2015). doi:10.1101/019281 
 
 http://biorxiv.org/content/early/2015/05/20/019281
 
-This paper contains the first descriptions and uses of poreminion, which evolved into fast5tools.
+This paper contains the first descriptions and uses of poreminion.
+
 
 
 
