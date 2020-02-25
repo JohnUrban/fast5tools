@@ -77,6 +77,7 @@ Other:
 
 
 Please cite fast5tools as:
+-------------------------------------------
 Urban JM, Foulk MS, Bliss JE, Coleman CM, Lu N, Mazloom R, Brown SJ, Spradling AC, Gerbi SA. 2020. 
 
 Single-molecule sequencing of long DNA molecules allows high contiguity de novo genome assembly for the fungus fly, Sciara coprophila. 
