@@ -42,6 +42,11 @@ parser.add_argument('--adjust-for-clipping', '-A', dest='adjust_for_clipping',
                    default=False, action='store_true',
                    help='''Give 1-based/closed coordinates (chr,start,end) with each output line that extends coordinates at each end the number of unaligned/clipped bases in read.''')
 
+parser.add_argument('--seqnames', '-S',
+                   default=False, action='store_true',
+                   help='''Similar to --positions, but returns only the most likely (majority) sequence name based on all split alignments as final column.''')
+
+
 ##When using the --independent option, this simply gives the reference coordinates of the aligned portion of the read.
 ##Alternatively, use --predicted with --positions and --independent to give the coordinates of the aligned portion extended out in each direction the number of clipped bases on each side.
 ##When interested in --positions, it typically makes more sense to use --independent.
@@ -85,14 +90,18 @@ for read in sam:
         perfect = perfectAlignment(read, pctid, numRec)
         totalPerfect += perfect
         out = []
-        if args.positions:
+        if args.positions or args.seqnames:
             coords = [e for e in read.get_genomic_window(flank=0, merge_dist=0, majority=0.5, require_order=False, require_strand=False, adjust_for_clipping_in_output=args.adjust_for_clipping)]
-            out += coords[:3]
+            if args.positions:
+                out += coords[:3]
         out += [read.get_read_name(), numRec, perfect]
         out += [pctid['match'], pctid['mismatch'], pctid['del'], pctid['ins'], pctid['unaligned']]
         out += pctid['pctid']
         if args.positions:
             out += [coords[3]]
+        elif args.seqnames:
+            out += [coords[0]]
+            
         print '\t'.join([str(e) for e in out])
 ##        print pctid, abs(pctid[1]-pctid[0]), abs(pctid[1]-pctid[3]), abs(pctid[3]-pctid[4]), abs(pctid[1]-pctid[0]) > abs(pctid[1]-pctid[3]),  abs(pctid[1]-pctid[0]) > abs(pctid[3]-pctid[4])
 ##        print read.get_per_base_align_status_for_read(), read.get_number_bases_in_read_aligned(), read.get_number_bases_in_read_not_aligned(), read.get_pct_of_read_aligned(), read.get_pct_of_read_not_aligned(), pctid[0], pctid[1], pctid[2], read.get_pct_identity_proxy()
